@@ -1,5 +1,21 @@
+
 from pyrogram import Client, filters
 from config import API_ID, API_HASH, BOT_TOKEN
+from flask import Flask
+from threading import Thread
+
+web = Flask(__name__)
+
+@web.route("/")
+def home():
+    return "Rename Bot is running!"
+
+def run_web():
+    web.run(host="0.0.0.0", port=8080)
+
+
+Thread(target=run_web).start()
+
 
 app = Client(
     "rename_bot",
