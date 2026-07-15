@@ -1,9 +1,13 @@
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-import shutil
+from pyrogram import Client, filters
 
 from pathlib import Path
-from pyrogram import Client, filters
+import shutil
+import subprocess
+import os
+
 from config import DOWNLOAD_DIR
+
 
 user_files = {}
 
@@ -25,10 +29,10 @@ async def download_file(client, message):
     | filters.animation
 )
 async def file_handler(client, message):
+
     user_files[message.from_user.id] = {
         "message": message,
-        "file_path": None,
-        "new_name": None
+        "file_path": None
     }
 
     await message.reply_text(
@@ -40,7 +44,10 @@ async def file_handler(client, message):
 
 @Client.on_message(filters.text & ~filters.command("start"))
 async def get_new_name(client, message):
-    if message.from_user.id not in user_files:
+
+    uid = message.from_user.id
+
+    if uid not in user_files:
         return
 
     new_name = message.text.strip()
@@ -50,30 +57,33 @@ async def get_new_name(client, message):
         "⏳ Please wait..."
     )
 
-    user_files[message.from_user.id]["new_name"] = new_name
 
     file_path = await download_file(
         client,
-        user_files[message.from_user.id]["message"]
+        user_files[uid]["message"]
     )
+
 
     await message.reply_text(
         "📝 Renaming file..."
     )
 
+
     old_file = Path(file_path)
-    extension = old_file.suffix
 
     new_file = old_file.with_name(
-        new_name + extension
+        new_name + old_file.suffix
     )
+
 
     shutil.move(
         file_path,
         new_file
     )
 
-    user_files[message.from_user.id]["file_path"] = str(new_file)
+
+    user_files[uid]["file_path"] = str(new_file)
+
 
     await message.reply_text(
         "Choose action:",
@@ -97,24 +107,33 @@ async def get_new_name(client, message):
 @Client.on_callback_query()
 async def action_handler(client, query: CallbackQuery):
 
+    uid = query.from_user.id
+
+
+    if uid not in user_files:
+        return
+
+
     if query.data == "rename_only":
 
-        await query.answer("Rename selected ✅")
-
-        file_path = user_files[query.from_user.id]["file_path"]
+        await query.answer(
+            "Rename selected ✅"
+        )
 
         await query.message.reply_document(
-            document=file_path,
+            document=user_files[uid]["file_path"],
             caption="📄 Rename completed ✅"
         )
 
 
     elif query.data == "compress":
 
-        await query.answer("Compress selected ✅")
+        await query.answer(
+            "Compress selected ✅"
+        )
 
         await query.message.reply_text(
-            "🗜 Select compression quality:",
+            "🗜 Select quality:",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -139,4 +158,65 @@ async def action_handler(client, query: CallbackQuery):
                     ]
                 ]
             )
+        )
+
+
+    elif query.data.startswith("compress_"):
+
+        quality = query.data.split("_")[1]
+
+
+        await query.answer(
+            "Compressing..."
+        )
+
+
+        await query.message.reply_text(
+            f"🗜 Compressing {quality}p...\n⏳ Please wait..."
+        )
+
+
+        input_file = user_files[uid]["file_path"]
+
+        input_path = Path(input_file)
+
+        output_file = input_path.with_name(
+            f"{input_path.stem}_{quality}p{input_path.suffix}"
+        )
+
+
+        cmd = [
+            "ffmpeg",
+            "-i",
+            str(input_path),
+            "-vf",
+            f"scale=-2:{quality}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-y",
+            str(output_file)
+        ]
+
+
+        subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+
+        await query.message.reply_text(
+            "📤 Uploading compressed file..."
+        )
+
+
+        await query.message.reply_document(
+            document=str(output_file),
+            caption=f"🗜 Compress {quality}p completed ✅"
         )
