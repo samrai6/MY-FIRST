@@ -1,3 +1,6 @@
+import os
+import shutil
+
 from pyrogram import Client, filters
 
 user_files = {}
