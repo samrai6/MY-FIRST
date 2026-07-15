@@ -17,7 +17,12 @@ def get_media(message):
         or message.voice
         or message.animation
     )
-
+    
+async def download_file(client, message):
+    file_path = await message.download(
+        file_name=DOWNLOAD_DIR
+    )
+    return file_path
 
 @Client.on_message(
     filters.document
