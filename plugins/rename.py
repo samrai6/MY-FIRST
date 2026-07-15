@@ -8,7 +8,9 @@ user_files = {}
 
 @Client.on_message(filters.document)
 async def file_handler(client, message):
-    user_files[message.from_user.id] = message
+    user_files[message.from_user.id] = {
+    "message": message
+    }
 
     await message.reply_text(
         "📁 File received!\n\n"
