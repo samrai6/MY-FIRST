@@ -7,6 +7,8 @@ from config import DOWNLOAD_DIR
 
 user_files = {}
 
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
 def get_media(message):
     return (
         message.document
