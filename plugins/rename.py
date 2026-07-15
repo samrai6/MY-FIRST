@@ -217,3 +217,25 @@ async def action_handler(client, query: CallbackQuery):
 status = await query.message.reply_text(
     "🗜 Compressing...\n0%"
 )
+import time
+
+start = time.time()
+
+for line in process.stdout:
+    line = line.strip()
+
+    if line.startswith("out_time_ms="):
+        try:
+            current = int(line.split("=")[1]) / 1000000
+            elapsed = int(time.time() - start)
+
+            await status.edit_text(
+                f"🗜 Compressing {quality}p...\n\n"
+                f"⏱ Elapsed: {elapsed}s"
+            )
+        except:
+            pass
+
+process.wait()
+
+await status.edit_text("📤 Uploading...")
