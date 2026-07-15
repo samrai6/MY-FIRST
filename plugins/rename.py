@@ -204,12 +204,13 @@ async def action_handler(client, query: CallbackQuery):
 ]
 
 
-        subprocess.run(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
+        process = subprocess.Popen(
+    cmd,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    universal_newlines=True
+)
 
         await query.message.reply_text(
             "📤 Uploading compressed file..."
