@@ -249,6 +249,20 @@ async def action_handler(client, query: CallbackQuery):
 
         await asyncio.to_thread(process.wait)
 
-        await status.edit_text(
-            "📤 Uploading..."
+                await status.edit_text(
+            "📤 Select upload type:",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "📄 Document",
+                            callback_data="upload_document"
+                        ),
+                        InlineKeyboardButton(
+                            "🎬 Video",
+                            callback_data="upload_video"
+                        )
+                    ]
+                ]
+            )
         )
