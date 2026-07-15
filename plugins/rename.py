@@ -52,7 +52,12 @@ async def get_new_name(client, message):
 
     new_name = message.text.strip()
 
-    user_files[message.from_user.id]["new_name"] = new_name
+    file_path = await download_file(
+    client,
+    user_files[message.from_user.id]["message"]
+)
+
+user_files[message.from_user.id]["file_path"] = file_path
 
     await message.reply_text(
         f"✅ New file name:\n`{new_name}`\n\n"
