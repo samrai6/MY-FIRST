@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 
+user_files = {}
 
 @Client.on_message(filters.document)
 async def file_handler(client, message):
