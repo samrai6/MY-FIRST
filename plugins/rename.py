@@ -9,20 +9,13 @@ user_files = {}
 
 Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
-def get_media(message):
-    return (
-        message.document
-        or message.video
-        or message.audio
-        or message.voice
-        or message.animation
-    )
-    
+
 async def download_file(client, message):
     file_path = await message.download(
         file_name=DOWNLOAD_DIR
     )
     return file_path
+
 
 @Client.on_message(
     filters.document
@@ -33,15 +26,17 @@ async def download_file(client, message):
 )
 async def file_handler(client, message):
     user_files[message.from_user.id] = {
-    "message": message,
-    "file_path": None,
-    "new_name": None
+        "message": message,
+        "file_path": None,
+        "new_name": None
     }
+
     await message.reply_text(
         "📁 File received!\n\n"
         "✏️ Now send me the new file name.\n\n"
         "Example:\nMovie 2026"
     )
+
 
 @Client.on_message(filters.text & ~filters.command("start"))
 async def get_new_name(client, message):
@@ -51,10 +46,10 @@ async def get_new_name(client, message):
     new_name = message.text.strip()
 
     await message.reply_text(
-    "⬇️ Downloading file...\n\n"
-    "⏳ Please wait..."
+        "⬇️ Downloading file...\n\n"
+        "⏳ Please wait..."
     )
-    
+
     user_files[message.from_user.id]["new_name"] = new_name
 
     file_path = await download_file(
@@ -66,10 +61,7 @@ async def get_new_name(client, message):
         "📝 Renaming file..."
     )
 
-    user_files[message.from_user.id]["file_path"] = file_path
-
     old_file = Path(file_path)
-
     extension = old_file.suffix
 
     new_file = old_file.with_name(
@@ -84,27 +76,30 @@ async def get_new_name(client, message):
     user_files[message.from_user.id]["file_path"] = str(new_file)
 
     await message.reply_text(
-    "Choose action:",
-    reply_markup=InlineKeyboardMarkup(
-        [
+        "Choose action:",
+        reply_markup=InlineKeyboardMarkup(
             [
-                InlineKeyboardButton("🗜 Compress", callback_data="compress"),
-                InlineKeyboardButton("📄 Rename Only", callback_data="rename_only")
+                [
+                    InlineKeyboardButton(
+                        "🗜 Compress",
+                        callback_data="compress"
+                    ),
+                    InlineKeyboardButton(
+                        "📄 Rename Only",
+                        callback_data="rename_only"
+                    )
+                ]
             ]
-        ]
+        )
     )
-    )
+
 
 @Client.on_callback_query()
 async def action_handler(client, query: CallbackQuery):
 
     if query.data == "rename_only":
-        await query.answer("Rename selected ✅")
 
-        await query.message.reply_text(
-            "📄 Rename Only selected\n"
-            "📤 Uploading file..."
-        )
+        await query.answer("Rename selected ✅")
 
         file_path = user_files[query.from_user.id]["file_path"]
 
@@ -113,21 +108,35 @@ async def action_handler(client, query: CallbackQuery):
             caption="📄 Rename completed ✅"
         )
 
-    elif query.data == "compress":
-    await query.answer("Compress selected ✅")
 
-    await query.message.reply_text(
-        "🗜 Select compression quality:",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    elif query.data == "compress":
+
+        await query.answer("Compress selected ✅")
+
+        await query.message.reply_text(
+            "🗜 Select compression quality:",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton("360p", callback_data="compress_360"),
-                    InlineKeyboardButton("480p", callback_data="compress_480")
-                ],
-                [
-                    InlineKeyboardButton("720p", callback_data="compress_720"),
-                    InlineKeyboardButton("1080p", callback_data="compress_1080")
+                    [
+                        InlineKeyboardButton(
+                            "360p",
+                            callback_data="compress_360"
+                        ),
+                        InlineKeyboardButton(
+                            "480p",
+                            callback_data="compress_480"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "720p",
+                            callback_data="compress_720"
+                        ),
+                        InlineKeyboardButton(
+                            "1080p",
+                            callback_data="compress_1080"
+                        )
+                    ]
                 ]
-            ]
+            )
         )
-    )
