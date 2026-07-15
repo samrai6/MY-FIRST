@@ -251,6 +251,10 @@ async def action_handler(client, query: CallbackQuery):
 
         user_files[uid]["output_file"] = str(output_file)
 
+                await asyncio.to_thread(process.wait)
+
+        user_files[uid]["output_file"] = str(output_file)
+
         await status.edit_text(
             "📤 Select upload type:",
             reply_markup=InlineKeyboardMarkup(
@@ -267,4 +271,4 @@ async def action_handler(client, query: CallbackQuery):
                     ]
                 ]
             )
-)
+        )
