@@ -56,7 +56,6 @@ async def file_handler(client, message):
         "output_file": None
     }
 
-
     await message.reply_text(
         "📁 File received!\n\n"
         "✏️ Send new file name."
@@ -69,7 +68,6 @@ async def file_handler(client, message):
 async def get_new_name(client, message):
 
     uid = message.from_user.id
-
 
     if uid not in user_files:
         return
@@ -172,7 +170,9 @@ async def action_handler(client, query: CallbackQuery):
                 ]
             )
         )
-            elif query.data.startswith("compress_"):
+
+
+    elif query.data.startswith("compress_"):
 
         quality = query.data.split("_")[1]
 
@@ -189,8 +189,8 @@ async def action_handler(client, query: CallbackQuery):
 
         settings = load_compress_settings()
 
-
-        cmd = [
+        
+                cmd = [
             "ffmpeg",
             "-hide_banner",
             "-progress",
@@ -239,11 +239,9 @@ async def action_handler(client, query: CallbackQuery):
 
             line = line.strip()
 
-
             if line.startswith("out_time_ms="):
 
                 try:
-
                     elapsed = int(
                         time.time() - start
                     )
@@ -253,7 +251,7 @@ async def action_handler(client, query: CallbackQuery):
                         f"🗜 Compressing {quality}p...\n\n"
                         f"🎚 CRF: {settings['crf']}\n"
                         f"⚙️ Codec: {settings['vcodec']}\n"
-                        f"⏱ Elapsed: {elapsed}s"
+                        f"⏱ Time: {elapsed}s"
                     )
 
 
@@ -323,4 +321,4 @@ async def action_handler(client, query: CallbackQuery):
         await query.message.reply_video(
             video=user_files[uid]["output_file"],
             caption="🎬 Upload completed ✅"
-    )
+            )
