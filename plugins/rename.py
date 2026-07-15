@@ -33,8 +33,10 @@ async def download_file(client, message):
 )
 async def file_handler(client, message):
     user_files[message.from_user.id] = {
-        "message": message
-    }
+    "message": message,
+    "file_path": None,
+    "new_name": None
+}
 
     await message.reply_text(
         "📁 File received!\n\n"
