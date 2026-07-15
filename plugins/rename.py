@@ -244,12 +244,14 @@ async def action_handler(client, query: CallbackQuery):
                         f"⏱ Elapsed: {elapsed}s"
                     )
 
-                except Exception:
-                    pass
+                        except Exception:
+            pass
 
         await asyncio.to_thread(process.wait)
 
-                await status.edit_text(
+        user_files[uid]["output_file"] = str(output_file)
+
+        await status.edit_text(
             "📤 Select upload type:",
             reply_markup=InlineKeyboardMarkup(
                 [
