@@ -4,7 +4,6 @@ from pyrogram import Client, filters
 from pathlib import Path
 import shutil
 import subprocess
-import os
 import time
 import asyncio
 import json
@@ -14,16 +13,26 @@ from config import DOWNLOAD_DIR
 
 user_files = {}
 
-
 SETTINGS_FILE = "compress_settings.json"
 
 
 def load_compress_settings():
-    with open(SETTINGS_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+
+    except:
+        return {
+            "vcodec": "libx264",
+            "crf": 24,
+            "pix_fmt": "yuv420p"
+        }
 
 
-Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
+Path(DOWNLOAD_DIR).mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 
 async def download_file(client, message):
@@ -43,8 +52,10 @@ async def file_handler(client, message):
 
     user_files[message.from_user.id] = {
         "message": message,
-        "file_path": None
+        "file_path": None,
+        "output_file": None
     }
+
 
     await message.reply_text(
         "📁 File received!\n\n"
@@ -52,37 +63,48 @@ async def file_handler(client, message):
     )
 
 
-@Client.on_message(filters.text & ~filters.command("start"))
+@Client.on_message(
+    filters.text & ~filters.command("start")
+)
 async def get_new_name(client, message):
 
     uid = message.from_user.id
 
+
     if uid not in user_files:
         return
 
+
     new_name = message.text.strip()
+
 
     await message.reply_text(
         "⬇️ Downloading..."
     )
+
 
     file_path = await download_file(
         client,
         user_files[uid]["message"]
     )
 
+
     old_file = Path(file_path)
+
 
     new_file = old_file.with_name(
         new_name + old_file.suffix
     )
+
 
     shutil.move(
         file_path,
         new_file
     )
 
+
     user_files[uid]["file_path"] = str(new_file)
+
 
     await message.reply_text(
         "Choose action:",
@@ -108,6 +130,7 @@ async def action_handler(client, query: CallbackQuery):
 
     uid = query.from_user.id
 
+
     if uid not in user_files:
         return
 
@@ -116,36 +139,48 @@ async def action_handler(client, query: CallbackQuery):
 
         await query.message.reply_document(
             document=user_files[uid]["file_path"],
-            caption="✅ Rename completed"
+            caption="📄 Rename completed ✅"
         )
 
 
     elif query.data == "compress":
 
         await query.message.reply_text(
-            "Select quality:",
+            "🗜 Select quality:",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("360p", callback_data="compress_360"),
-                        InlineKeyboardButton("480p", callback_data="compress_480")
+                        InlineKeyboardButton(
+                            "360p",
+                            callback_data="compress_360"
+                        ),
+                        InlineKeyboardButton(
+                            "480p",
+                            callback_data="compress_480"
+                        )
                     ],
                     [
-                        InlineKeyboardButton("720p", callback_data="compress_720"),
-                        InlineKeyboardButton("1080p", callback_data="compress_1080")
+                        InlineKeyboardButton(
+                            "720p",
+                            callback_data="compress_720"
+                        ),
+                        InlineKeyboardButton(
+                            "1080p",
+                            callback_data="compress_1080"
+                        )
                     ]
                 ]
             )
         )
-
-
-    elif query.data.startswith("compress_"):
+            elif query.data.startswith("compress_"):
 
         quality = query.data.split("_")[1]
+
 
         input_path = Path(
             user_files[uid]["file_path"]
         )
+
 
         output_file = input_path.with_name(
             f"{input_path.stem}_{quality}p{input_path.suffix}"
@@ -158,6 +193,8 @@ async def action_handler(client, query: CallbackQuery):
         cmd = [
             "ffmpeg",
             "-hide_banner",
+            "-progress",
+            "pipe:1",
             "-i",
             str(input_path),
             "-vf",
@@ -174,6 +211,8 @@ async def action_handler(client, query: CallbackQuery):
             "96k",
             "-map_metadata",
             "-1",
+            "-movflags",
+            "+faststart",
             "-y",
             str(output_file)
         ]
@@ -183,16 +222,44 @@ async def action_handler(client, query: CallbackQuery):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
+            universal_newlines=True
         )
 
 
         status = await query.message.reply_text(
-            "🗜 Compressing..."
+            "🗜 Compressing...\n0%"
         )
 
 
         start = time.time()
+
+
+        for line in process.stdout:
+
+            line = line.strip()
+
+
+            if line.startswith("out_time_ms="):
+
+                try:
+
+                    elapsed = int(
+                        time.time() - start
+                    )
+
+
+                    await status.edit_text(
+                        f"🗜 Compressing {quality}p...\n\n"
+                        f"🎚 CRF: {settings['crf']}\n"
+                        f"⚙️ Codec: {settings['vcodec']}\n"
+                        f"⏱ Elapsed: {elapsed}s"
+                    )
+
+
+                except Exception:
+                    pass
+
 
 
         await asyncio.to_thread(
@@ -200,14 +267,31 @@ async def action_handler(client, query: CallbackQuery):
         )
 
 
-        elapsed = int(time.time() - start)
+        elapsed = int(
+            time.time() - start
+        )
 
 
-        user_files[uid]["output_file"] = str(output_file)
+        if process.returncode != 0:
+
+            await status.edit_text(
+                "❌ Compression Failed"
+            )
+
+            return
+
+
+
+        user_files[uid]["output_file"] = str(
+            output_file
+        )
 
 
         await status.edit_text(
-            f"✅ Compression Done\n"
+            f"✅ Compression Done\n\n"
+            f"🎬 Quality: {quality}p\n"
+            f"🎚 CRF: {settings['crf']}\n"
+            f"⚙️ Codec: {settings['vcodec']}\n"
             f"⏱ Time: {elapsed}s",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -239,4 +323,4 @@ async def action_handler(client, query: CallbackQuery):
         await query.message.reply_video(
             video=user_files[uid]["output_file"],
             caption="🎬 Upload completed ✅"
-        )
+    )
