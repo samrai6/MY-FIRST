@@ -14,6 +14,15 @@ from config import DOWNLOAD_DIR
 
 user_files = {}
 
+
+SETTINGS_FILE = "compress_settings.json"
+
+
+def load_compress_settings():
+    with open(SETTINGS_FILE, "r") as f:
+        return json.load(f)
+
+
 Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 
@@ -143,6 +152,9 @@ async def action_handler(client, query: CallbackQuery):
         )
 
 
+        settings = load_compress_settings()
+
+
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -151,11 +163,11 @@ async def action_handler(client, query: CallbackQuery):
             "-vf",
             f"scale=-2:{quality}",
             "-c:v",
-            "libx264",
+            settings["vcodec"],
             "-crf",
-            "24",
+            str(settings["crf"]),
             "-pix_fmt",
-            "yuv420p",
+            settings["pix_fmt"],
             "-c:a",
             "aac",
             "-b:a",
