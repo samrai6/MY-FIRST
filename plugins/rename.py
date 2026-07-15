@@ -214,12 +214,6 @@ async def action_handler(client, query: CallbackQuery):
     universal_newlines=True
 )
 
-        await query.message.reply_text(
-            "📤 Uploading compressed file..."
-        )
-
-
-        await query.message.reply_document(
-            document=str(output_file),
-            caption=f"🗜 Compress {quality}p completed ✅"
-        )
+status = await query.message.reply_text(
+    "🗜 Compressing...\n0%"
+)
