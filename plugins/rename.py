@@ -94,7 +94,6 @@ async def get_new_name(client, message):
         ]
     )
     )
-from pyrogram.types import CallbackQuery
 
 @Client.on_callback_query()
 async def action_handler(client, query: CallbackQuery):
@@ -115,8 +114,20 @@ async def action_handler(client, query: CallbackQuery):
         )
 
     elif query.data == "compress":
-        await query.answer("Compress selected ✅")
+    await query.answer("Compress selected ✅")
 
-        await query.message.reply_text(
-            "🗜 Compress process started..."
+    await query.message.reply_text(
+        "🗜 Select compression quality:",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("360p", callback_data="compress_360"),
+                    InlineKeyboardButton("480p", callback_data="compress_480")
+                ],
+                [
+                    InlineKeyboardButton("720p", callback_data="compress_720"),
+                    InlineKeyboardButton("1080p", callback_data="compress_1080")
+                ]
+            ]
         )
+    )
