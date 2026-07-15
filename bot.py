@@ -1,4 +1,5 @@
 import os
+import subprocess
 from threading import Thread
 
 from flask import Flask
@@ -22,7 +23,7 @@ def run_web():
     )
 
 
-Thread(target=run_web).start()
+Thread(target=run_web, daemon=True).start()
 
 
 # Telegram Bot
@@ -35,5 +36,23 @@ app = Client(
 )
 
 print("Bot Started Successfully!")
+
+# Check FFmpeg
+try:
+    result = subprocess.run(
+        ["ffmpeg", "-version"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode == 0:
+        print("========== FFMPEG FOUND ==========")
+        print(result.stdout.splitlines()[0])
+    else:
+        print("========== FFMPEG ERROR ==========")
+        print(result.stderr)
+
+except FileNotFoundError:
+    print("========== FFMPEG NOT FOUND ==========")
 
 app.run()
