@@ -1,5 +1,4 @@
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import os
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import shutil
 
 from pathlib import Path
