@@ -93,3 +93,20 @@ await message.reply_text(
         ]
     )
     )
+from pyrogram.types import CallbackQuery
+
+@Client.on_callback_query()
+async def action_handler(client, query: CallbackQuery):
+
+    if query.data == "rename_only":
+        await query.answer("Rename selected ✅")
+        await query.message.reply_text(
+            "📄 Rename Only selected\n"
+            "📤 Uploading file..."
+        )
+
+    elif query.data == "compress":
+        await query.answer("Compress selected ✅")
+        await query.message.reply_text(
+            "🗜 Compress process started..."
+        )
