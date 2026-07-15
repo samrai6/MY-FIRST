@@ -2,6 +2,7 @@ import os
 import shutil
 
 from pyrogram import Client, filters
+from config import DOWNLOAD_DIR
 
 user_files = {}
 
