@@ -5,6 +5,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import os
+import time
+import asyncio
 
 from config import DOWNLOAD_DIR
 
@@ -206,7 +208,7 @@ async def action_handler(client, query: CallbackQuery):
 ]
 
 
-                process = subprocess.Popen(
+        process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
