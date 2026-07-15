@@ -36,8 +36,7 @@ async def file_handler(client, message):
     "message": message,
     "file_path": None,
     "new_name": None
-}
-
+    }
     await message.reply_text(
         "📁 File received!\n\n"
         "✏️ Now send me the new file name.\n\n"
