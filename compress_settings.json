@@ -1,0 +1,5 @@
+{
+  "vcodec": "libx264",
+  "crf": 24,
+  "pix_fmt": "yuv420p"
+}
