@@ -186,22 +186,22 @@ async def action_handler(client, query: CallbackQuery):
 
 
         cmd = [
-            "ffmpeg",
-            "-i",
-            str(input_path),
-            "-vf",
-            f"scale=-2:{quality}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "fast",
-            "-crf",
-            "28",
-            "-c:a",
-            "aac",
-            "-y",
-            str(output_file)
-        ]
+    "ffmpeg",
+    "-hide_banner",
+    "-threads", "0",
+    "-i", str(input_path),
+    "-vf", f"scale=-2:{quality}",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-crf", "24",
+    "-pix_fmt", "yuv420p",
+    "-movflags", "+faststart",
+    "-c:a", "aac",
+    "-b:a", "96k",
+    "-ac", "2",
+    "-y",
+    str(output_file)
+]
 
 
         subprocess.run(
