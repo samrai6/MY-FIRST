@@ -74,7 +74,7 @@ async def get_new_name(client, message):
 
     user_files[message.from_user.id]["file_path"] = str(new_file)
 
-    await message.reply_text(
-        f"✅ Renamed successfully!\n\n"
-        f"📄 Name: `{new_name + extension}`"
+    await message.reply_document(
+    document=str(new_file),
+    caption=f"📄 {new_name + extension}"
     )
