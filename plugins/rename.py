@@ -188,6 +188,8 @@ async def action_handler(client, query: CallbackQuery):
         cmd = [
     "ffmpeg",
     "-hide_banner",
+    "-nostats",
+    "-progress", "pipe:1",
     "-threads", "0",
     "-i", str(input_path),
     "-vf", f"scale=-2:{quality}",
