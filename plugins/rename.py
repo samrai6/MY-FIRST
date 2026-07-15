@@ -206,36 +206,37 @@ async def action_handler(client, query: CallbackQuery):
 ]
 
 
-        process = subprocess.Popen(
-    cmd,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    text=True,
-    universal_newlines=True
-)
+                process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            universal_newlines=True
+        )
 
-status = await query.message.reply_text(
-    "🗜 Compressing...\n0%"
-)
-import time
+        status = await query.message.reply_text(
+            "🗜 Compressing...\n0%"
+        )
 
-start = time.time()
+        start = time.time()
 
-for line in process.stdout:
-    line = line.strip()
+        for line in process.stdout:
+            line = line.strip()
 
-    if line.startswith("out_time_ms="):
-        try:
-            current = int(line.split("=")[1]) / 1000000
-            elapsed = int(time.time() - start)
+            if line.startswith("out_time_ms="):
+                try:
+                    elapsed = int(time.time() - start)
 
-            await status.edit_text(
-                f"🗜 Compressing {quality}p...\n\n"
-                f"⏱ Elapsed: {elapsed}s"
-            )
-        except:
-            pass
+                    await status.edit_text(
+                        f"🗜 Compressing {quality}p...\n\n"
+                        f"⏱ Elapsed: {elapsed}s"
+                    )
 
-process.wait()
+                except Exception:
+                    pass
 
-await status.edit_text("📤 Uploading...")
+        await asyncio.to_thread(process.wait)
+
+        await status.edit_text(
+            "📤 Uploading..."
+        )
