@@ -187,7 +187,7 @@ async def action_handler(client, query: CallbackQuery):
         )
 
 
-        cmd = [
+cmd = [
     "ffmpeg",
     "-hide_banner",
     "-nostats",
