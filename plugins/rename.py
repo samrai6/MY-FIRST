@@ -57,14 +57,14 @@ async def get_new_name(client, message):
     )
     user_files[message.from_user.id]["new_name"] = new_name
 
-    file_path = await download_file(
-    client,
-    user_files[message.from_user.id]["message"]
-)
+        file_path = await download_file(
+        client,
+        user_files[message.from_user.id]["message"]
+    )
 
-await message.reply_text(
-    "📝 Renaming file..."
-)
+    await message.reply_text(
+        "📝 Renaming file..."
+    )
 
     user_files[message.from_user.id]["file_path"] = file_path
 
