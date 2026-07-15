@@ -75,7 +75,14 @@ async def get_new_name(client, message):
 
     user_files[message.from_user.id]["file_path"] = str(new_file)
 
-    await message.reply_document(
-    document=str(new_file),
-    caption=f"📄 {new_name + extension}"
+    await message.reply_text(
+    "Choose action:",
+    reply_markup=InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🗜 Compress", callback_data="compress"),
+                InlineKeyboardButton("📄 Rename Only", callback_data="rename_only")
+            ]
+        ]
+    )
     )
