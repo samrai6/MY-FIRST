@@ -54,29 +54,47 @@ async def get_new_name(client, message):
 
     user_files[message.from_user.id]["new_name"] = new_name
 
+    @Client.on_message(filters.text & ~filters.command("start"))
+async def get_new_name(client, message):
+    if message.from_user.id not in user_files:
+        return
+
+    new_name = message.text.strip()
+
+    user_files[message.from_user.id]["new_name"] = new_name
+
+    @Client.on_message(filters.text & ~filters.command("start"))
+async def get_new_name(client, message):
+    if message.from_user.id not in user_files:
+        return
+
+    new_name = message.text.strip()
+
+    user_files[message.from_user.id]["new_name"] = new_name
+
     file_path = await download_file(
-    client,
-    user_files[message.from_user.id]["message"]
-)
+        client,
+        user_files[message.from_user.id]["message"]
+    )
 
-user_files[message.from_user.id]["file_path"] = file_path
+    user_files[message.from_user.id]["file_path"] = file_path
 
+    old_file = Path(file_path)
 
-old_file = Path(file_path)
+    extension = old_file.suffix
 
-extension = old_file.suffix
+    new_file = old_file.with_name(
+        new_name + extension
+    )
 
-new_file = old_file.with_name(
-    new_name + extension
-)
+    shutil.move(
+        file_path,
+        new_file
+    )
 
-shutil.move(
-    file_path,
-    new_file
-)
+    user_files[message.from_user.id]["file_path"] = str(new_file)
 
-user_files[message.from_user.id]["file_path"] = str(new_file)
     await message.reply_text(
-        f"✅ New file name:\n`{new_name}`\n\n"
-        "⏳ Rename process will start in the next step."
+        f"✅ Renamed successfully!\n\n"
+        f"📄 Name: `{new_name + extension}`"
     )
