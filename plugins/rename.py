@@ -48,6 +48,6 @@ async def get_new_name(client, message):
     user_files[message.from_user.id]["new_name"] = new_name
 
     await message.reply_text(
-        f"✅ New file name:\n`{new_name}`\n\n"
-        "⏳ Rename process will start in the next step."
-    )
+    f"✅ New file name:\n`{new_name}`\n\n"
+    "⏳ Rename process will start in the next step."
+)
