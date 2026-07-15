@@ -7,6 +7,15 @@ from config import DOWNLOAD_DIR
 
 user_files = {}
 
+def get_media(message):
+    return (
+        message.document
+        or message.video
+        or message.audio
+        or message.voice
+        or message.animation
+    )
+
 
 @Client.on_message(
     filters.document
