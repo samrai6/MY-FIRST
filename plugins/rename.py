@@ -7,8 +7,6 @@ from config import DOWNLOAD_DIR
 
 user_files = {}
 
-from pathlib import Path
-
 Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 def get_media(message):
