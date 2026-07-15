@@ -54,7 +54,8 @@ async def get_new_name(client, message):
     await message.reply_text(
     "⬇️ Downloading file...\n\n"
     "⏳ Please wait..."
-    )[message.from_user.id]["new_name"] = new_name
+    )
+    [message.from_user.id]["new_name"] = new_name
 
     file_path = await download_file(
         client,
