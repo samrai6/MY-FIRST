@@ -226,7 +226,7 @@ async def action_handler(client, query: CallbackQuery):
             universal_newlines=True
         )
 
-        status = await query.message.reply_text(
+                status = await query.message.reply_text(
             "🗜 Compressing...\n0%"
         )
 
@@ -244,8 +244,8 @@ async def action_handler(client, query: CallbackQuery):
                         f"⏱ Elapsed: {elapsed}s"
                     )
 
-                        except Exception:
-            pass
+                except Exception:
+                    pass
 
         await asyncio.to_thread(process.wait)
 
@@ -267,4 +267,4 @@ async def action_handler(client, query: CallbackQuery):
                     ]
                 ]
             )
-        )
+)
