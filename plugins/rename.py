@@ -186,27 +186,37 @@ async def action_handler(client, query: CallbackQuery):
             f"{input_path.stem}_{quality}p{input_path.suffix}"
         )
 
-
-cmd = [
-    "ffmpeg",
-    "-hide_banner",
-    "-nostats",
-    "-progress", "pipe:1",
-    "-threads", "0",
-    "-i", str(input_path),
-    "-vf", f"scale=-2:{quality}",
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-crf", "24",
-    "-pix_fmt", "yuv420p",
-    "-movflags", "+faststart",
-    "-c:a", "aac",
-    "-b:a", "96k",
-    "-ac", "2",
-    "-y",
-    str(output_file)
-]
-
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-progress",
+            "pipe:1",
+            "-threads",
+            "0",
+            "-i",
+            str(input_path),
+            "-vf",
+            f"scale=-2:{quality}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "24",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-ac",
+            "2",
+            "-y",
+            str(output_file)
+        ]
 
         process = subprocess.Popen(
             cmd,
