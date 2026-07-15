@@ -1,9 +1,9 @@
 from pyrogram import Client, filters
 
 
-@Client.on_message(filters.command("start"))
-async def start(client, message):
+@Client.on_message(filters.document)
+async def file_handler(client, message):
     await message.reply_text(
-        "👋 Hello! I am Rename Bot.\n\n"
-        "Send me a file to rename."
+        "📁 File received!\n\n"
+        "Rename feature is ready to add."
     )
