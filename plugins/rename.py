@@ -6,15 +6,22 @@ from pyrogram import Client, filters
 user_files = {}
 
 
-@Client.on_message(filters.document)
+@Client.on_message(
+    filters.document
+    | filters.video
+    | filters.audio
+    | filters.voice
+    | filters.animation
+)
 async def file_handler(client, message):
     user_files[message.from_user.id] = {
-    "message": message
+        "message": message
     }
 
     await message.reply_text(
         "📁 File received!\n\n"
-        "✏️ Now send me the new file name."
+        "✏️ Now send me the new file name.\n\n"
+        "Example:\nMovie 2026"
     )
 
 
@@ -23,9 +30,11 @@ async def get_new_name(client, message):
     if message.from_user.id not in user_files:
         return
 
-    new_name = message.text
+    new_name = message.text.strip()
+
+    user_files[message.from_user.id]["new_name"] = new_name
 
     await message.reply_text(
-        f"✅ New file name:\n{new_name}\n\n"
-        "🚧 Actual rename feature will be added next."
+        f"✅ New file name:\n`{new_name}`\n\n"
+        "⏳ Rename process will start in the next step."
     )
