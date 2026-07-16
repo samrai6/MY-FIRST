@@ -190,40 +190,43 @@ async def action_handler(client, query: CallbackQuery):
 
 
         cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-progress",
-            "pipe:1",
-            "-stats_period",
-            "1",
-            "-i",
-            str(input_path),
-            "-vf",
-            f"scale=-2:{quality}",
-            "-c:v",
-            settings["vcodec"],
-            "-crf",
-            str(settings["crf"]),
-            "-pix_fmt",
-            settings["pix_fmt"],
-            "-c:a",
-            "aac",
-            "-b:a",
-            "96k",
-            "-map_metadata",
-            "-1",
-            "-movflags",
-            "+faststart",
-            "-y",
-            str(output_file)
-        ]
+    "ffmpeg",
+    "-hide_banner",
+    "-progress",
+    "pipe:1",
+    "-stats_period",
+    "1",
+    "-i",
+    str(input_path),
+    "-vf",
+    f"scale=-2:{quality}",
+    "-c:v",
+    settings["vcodec"],
+    "-preset",
+    "veryfast",
+    "-crf",
+    str(settings["crf"]),
+    "-pix_fmt",
+    settings["pix_fmt"],
+    "-c:a",
+    "aac",
+    "-b:a",
+    "96k",
+    "-map_metadata",
+    "-1",
+    "-movflags",
+    "+faststart",
+    "-y",
+    str(output_file)
+]
 
         process = subprocess.Popen(
     cmd,
     stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT,
     text=True,
-    universal_newlines=True
+    universal_newlines=True,
+    bufsize=1
 )
 
         status = await query.message.reply_text(
