@@ -112,9 +112,10 @@ async def get_new_name(client, message):
     )
 
 
-@Client.on_callback_query()
+@Client.on_callback_query(
+    filters.regex("^(compress|compress_|rename_only|upload_)")
+)
 async def action_handler(client, query: CallbackQuery):
-
     uid = query.from_user.id
 
     if uid not in user_files:
