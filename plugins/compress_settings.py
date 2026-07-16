@@ -1,14 +1,22 @@
 import json
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 
 SETTINGS_FILE = "compress_settings.json"
 
 
 def load_settings():
-    with open(SETTINGS_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+
+    except:
+        return {
+            "vcodec": "libx264",
+            "crf": 24,
+            "pix_fmt": "yuv420p"
+        }
 
 
 def save_settings(data):
@@ -25,7 +33,7 @@ async def settings_menu(client, message):
         f"⚙️ Compress Settings\n\n"
         f"🎞 Codec: {settings['vcodec']}\n"
         f"🎚 CRF: {settings['crf']}\n"
-        f"🎨 Bit: {settings['pix_fmt']}",
+        f"🎨 Pixel: {settings['pix_fmt']}",
         reply_markup=InlineKeyboardMarkup(
             [
                 [
@@ -42,8 +50,8 @@ async def settings_menu(client, message):
                 ],
                 [
                     InlineKeyboardButton(
-                        "🎨 Bit",
-                        callback_data="change_bit"
+                        "🎨 Pixel",
+                        callback_data="change_pixel"
                     )
                 ]
             ]
@@ -51,38 +59,49 @@ async def settings_menu(client, message):
     )
 
 
-@Client.on_callback_query()
-async def settings_callback(client, query):
+@Client.on_callback_query(
+    filters.regex("^(change_codec|change_crf|change_pixel)$")
+)
+async def settings_callback(client, query: CallbackQuery):
 
     settings = load_settings()
 
+
     if query.data == "change_codec":
 
-        settings["vcodec"] = (
-            "libx265"
-            if settings["vcodec"] == "libx264"
-            else "libx264"
-        )
+        if settings["vcodec"] == "libx264":
+            settings["vcodec"] = "libx265"
+        else:
+            settings["vcodec"] = "libx264"
+
 
     elif query.data == "change_crf":
 
-        settings["crf"] = (
-            28
-            if settings["crf"] == 24
-            else 24
-        )
+        if settings["crf"] == 24:
+            settings["crf"] = 28
+        else:
+            settings["crf"] = 24
 
-    elif query.data == "change_bit":
 
-        settings["pix_fmt"] = (
-            "yuv420p10le"
-            if settings["pix_fmt"] == "yuv420p"
-            else "yuv420p"
-        )
+    elif query.data == "change_pixel":
 
-    else:
-        return
+        if settings["pix_fmt"] == "yuv420p":
+            settings["pix_fmt"] = "yuv420p10le"
+        else:
+            settings["pix_fmt"] = "yuv420p"
+
 
     save_settings(settings)
 
-    await query.answer("Updated ✅")
+
+    await query.answer(
+        "Updated ✅"
+    )
+
+
+    await query.message.edit_text(
+        f"⚙️ Compress Settings Updated\n\n"
+        f"🎞 Codec: {settings['vcodec']}\n"
+        f"🎚 CRF: {settings['crf']}\n"
+        f"🎨 Pixel: {settings['pix_fmt']}"
+    )
