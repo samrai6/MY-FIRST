@@ -187,10 +187,9 @@ async def action_handler(client, query: CallbackQuery):
         )
 
 
-        settings = load_compress_settings()
+                settings = load_compress_settings()
 
-        
-                cmd = [
+        cmd = [
             "ffmpeg",
             "-hide_banner",
             "-progress",
@@ -216,7 +215,6 @@ async def action_handler(client, query: CallbackQuery):
             "-y",
             str(output_file)
         ]
-
 
         process = subprocess.Popen(
             cmd,
