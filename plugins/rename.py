@@ -254,27 +254,23 @@ async def action_handler(client, query: CallbackQuery):
         start = time.time()
 
 
-        for line in process.stdout:
+        if line.startswith("out_time_ms="):
 
-            line = line.strip()
+    value = line.split("=")[1]
 
+    if value == "N/A":
+        continue
 
-            if "out_time_ms=" in line:
+    current = int(value) / 1000000
 
-                current = int(
-                    line.split("=")[1]
-                ) / 1000000
+    percent = min(
+        int((current / duration) * 100),
+        100
+    )
 
-
-                percent = min(
-    int((current / duration) * 100),
-    100
-)
-
-                elapsed = int(
-                    time.time() - start
-                )
-
+    elapsed = int(
+        time.time() - start
+    )
 
                 try:
                     await status.edit_text(
