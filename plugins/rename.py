@@ -72,9 +72,7 @@ async def get_new_name(client, message):
     if uid not in user_files:
         return
 
-
     new_name = message.text.strip()
-
 
     await message.reply_text(
         "⬇️ Downloading..."
@@ -129,7 +127,6 @@ async def get_new_name(client, message):
 async def action_handler(client, query: CallbackQuery):
 
     uid = query.from_user.id
-
 
     if uid not in user_files:
         return
@@ -231,7 +228,24 @@ async def action_handler(client, query: CallbackQuery):
 
 
         status = await query.message.reply_text(
-            "🗜 Compressing...\n0%"
+            "🗜 Compressing...\n📊 Progress: 0%"
+        )
+
+
+        # Get video duration
+        duration_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(input_path)
+        ]
+
+        duration = float(
+            subprocess.check_output(duration_cmd)
         )
 
 
@@ -245,6 +259,16 @@ async def action_handler(client, query: CallbackQuery):
 
             if "out_time_ms=" in line:
 
+                current = int(
+                    line.split("=")[1]
+                ) / 1000000
+
+
+                percent = int(
+                    (current / duration) * 100
+                )
+
+
                 elapsed = int(
                     time.time() - start
                 )
@@ -253,6 +277,7 @@ async def action_handler(client, query: CallbackQuery):
                 try:
                     await status.edit_text(
                         f"🗜 Compressing {quality}p...\n\n"
+                        f"📊 Progress: {percent}%\n"
                         f"🎚 CRF: {settings['crf']}\n"
                         f"⚙️ Codec: {settings['vcodec']}\n"
                         f"⏱ Elapsed: {elapsed}s"
@@ -323,4 +348,4 @@ async def action_handler(client, query: CallbackQuery):
         await query.message.reply_video(
             video=user_files[uid]["output_file"],
             caption="🎬 Upload completed ✅"
-        )
+                )
