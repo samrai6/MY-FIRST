@@ -219,13 +219,12 @@ async def action_handler(client, query: CallbackQuery):
         ]
 
         process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            universal_newlines=True
+    cmd,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    universal_newlines=True
         )
-
 
         status = await query.message.reply_text(
             "🗜 Compressing...\n📊 Progress: 0%"
@@ -264,10 +263,10 @@ async def action_handler(client, query: CallbackQuery):
                 ) / 1000000
 
 
-                percent = int(
-                    (current / duration) * 100
-                )
-
+                percent = min(
+    int((current / duration) * 100),
+    100
+)
 
                 elapsed = int(
                     time.time() - start
