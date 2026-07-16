@@ -133,24 +133,12 @@ async def action_handler(client, query: CallbackQuery):
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton(
-                            "360p",
-                            callback_data="compress_360"
-                        ),
-                        InlineKeyboardButton(
-                            "480p",
-                            callback_data="compress_480"
-                        )
+                        InlineKeyboardButton("360p", callback_data="compress_360"),
+                        InlineKeyboardButton("480p", callback_data="compress_480")
                     ],
                     [
-                        InlineKeyboardButton(
-                            "720p",
-                            callback_data="compress_720"
-                        ),
-                        InlineKeyboardButton(
-                            "1080p",
-                            callback_data="compress_1080"
-                        )
+                        InlineKeyboardButton("720p", callback_data="compress_720"),
+                        InlineKeyboardButton("1080p", callback_data="compress_1080")
                     ]
                 ]
             )
@@ -169,7 +157,7 @@ async def action_handler(client, query: CallbackQuery):
         )
 
         settings = load_compress_settings()
-
+        
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -199,14 +187,13 @@ async def action_handler(client, query: CallbackQuery):
             "+faststart",
             "-y",
             str(output_file)
-        ]
+    ]
 
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             text=True,
-            universal_newlines=True,
             bufsize=1
         )
 
@@ -225,13 +212,27 @@ async def action_handler(client, query: CallbackQuery):
             str(input_path)
         ]
 
-        duration = float(
-            subprocess.check_output(duration_cmd).decode().strip()
-        )
+        try:
+            duration = float(
+                subprocess.check_output(
+                    duration_cmd
+                ).decode().strip()
+            )
+        except:
+            await status.edit_text(
+                "❌ Unable to read video duration."
+            )
+            process.kill()
+            return
 
         start = time.time()
 
-        for line in process.stdout:
+        while True:
+
+            line = process.stdout.readline()
+
+            if not line and process.poll() is not None:
+                break
 
             line = line.strip()
 
@@ -302,7 +303,7 @@ async def action_handler(client, query: CallbackQuery):
                     ]
                 ]
             )
-        )
+            )
 
     elif query.data == "upload_document":
 
