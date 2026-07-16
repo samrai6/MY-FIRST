@@ -20,7 +20,6 @@ def load_compress_settings():
     try:
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f)
-
     except:
         return {
             "vcodec": "libx264",
@@ -42,11 +41,11 @@ async def download_file(client, message):
 
 
 @Client.on_message(
-    filters.document
-    | filters.video
-    | filters.audio
-    | filters.voice
-    | filters.animation
+    filters.document |
+    filters.video |
+    filters.audio |
+    filters.voice |
+    filters.animation
 )
 async def file_handler(client, message):
 
@@ -62,9 +61,7 @@ async def file_handler(client, message):
     )
 
 
-@Client.on_message(
-    filters.text & ~filters.command("start")
-)
+@Client.on_message(filters.text & ~filters.command("start"))
 async def get_new_name(client, message):
 
     uid = message.from_user.id
@@ -72,37 +69,29 @@ async def get_new_name(client, message):
     if uid not in user_files:
         return
 
-
     new_name = message.text.strip()
-
 
     await message.reply_text(
         "⬇️ Downloading..."
     )
-
 
     file_path = await download_file(
         client,
         user_files[uid]["message"]
     )
 
-
     old_file = Path(file_path)
-
 
     new_file = old_file.with_name(
         new_name + old_file.suffix
     )
-
 
     shutil.move(
         file_path,
         new_file
     )
 
-
     user_files[uid]["file_path"] = str(new_file)
-
 
     await message.reply_text(
         "Choose action:",
@@ -127,7 +116,6 @@ async def get_new_name(client, message):
 async def action_handler(client, query: CallbackQuery):
 
     uid = query.from_user.id
-
 
     if uid not in user_files:
         return
@@ -176,24 +164,19 @@ async def action_handler(client, query: CallbackQuery):
 
         quality = query.data.split("_")[1]
 
-
         input_path = Path(
             user_files[uid]["file_path"]
         )
-
 
         output_file = input_path.with_name(
             f"{input_path.stem}_{quality}p{input_path.suffix}"
         )
 
-
-                settings = load_compress_settings()
+        settings = load_compress_settings()
 
         cmd = [
             "ffmpeg",
             "-hide_banner",
-            "-progress",
-            "pipe:1",
             "-i",
             str(input_path),
             "-vf",
@@ -220,68 +203,28 @@ async def action_handler(client, query: CallbackQuery):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            universal_newlines=True
+            text=True
         )
-
 
         status = await query.message.reply_text(
-            "🗜 Compressing...\n0%"
+            "🗜 Compressing..."
         )
 
-
         start = time.time()
-
-
-        for line in process.stdout:
-
-            line = line.strip()
-
-            if line.startswith("out_time_ms="):
-
-                try:
-                    elapsed = int(
-                        time.time() - start
-                    )
-
-
-                    await status.edit_text(
-                        f"🗜 Compressing {quality}p...\n\n"
-                        f"🎚 CRF: {settings['crf']}\n"
-                        f"⚙️ Codec: {settings['vcodec']}\n"
-                        f"⏱ Time: {elapsed}s"
-                    )
-
-
-                except Exception:
-                    pass
-
-
 
         await asyncio.to_thread(
             process.wait
         )
 
-
-        elapsed = int(
-            time.time() - start
-        )
-
+        elapsed = int(time.time() - start)
 
         if process.returncode != 0:
-
             await status.edit_text(
                 "❌ Compression Failed"
             )
-
             return
 
-
-
-        user_files[uid]["output_file"] = str(
-            output_file
-        )
-
+        user_files[uid]["output_file"] = str(output_file)
 
         await status.edit_text(
             f"✅ Compression Done\n\n"
@@ -319,4 +262,4 @@ async def action_handler(client, query: CallbackQuery):
         await query.message.reply_video(
             video=user_files[uid]["output_file"],
             caption="🎬 Upload completed ✅"
-            )
+        )
