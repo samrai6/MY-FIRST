@@ -221,10 +221,10 @@ async def action_handler(client, query: CallbackQuery):
         process = subprocess.Popen(
     cmd,
     stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
     text=True,
     universal_newlines=True
-        )
+)
 
         status = await query.message.reply_text(
             "🗜 Compressing...\n📊 Progress: 0%"
