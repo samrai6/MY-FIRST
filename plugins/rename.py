@@ -217,17 +217,37 @@ async def action_handler(client, query: CallbackQuery):
 
         start = time.time()
 
-        await asyncio.to_thread(
-            process.wait
-        )
+        for line in process.stdout:
+
+    line = line.strip()
+
+    if "time=" in line:
 
         elapsed = int(time.time() - start)
 
-        if process.returncode != 0:
+        try:
             await status.edit_text(
-                "❌ Compression Failed"
+                f"🗜 Compressing {quality}p...\n\n"
+                f"🎚 CRF: {settings['crf']}\n"
+                f"⚙️ Codec: {settings['vcodec']}\n"
+                f"⏱ Elapsed: {elapsed}s"
             )
-            return
+
+        except:
+            pass
+
+
+await asyncio.to_thread(
+    process.wait
+)
+
+elapsed = int(time.time() - start)
+
+if process.returncode != 0:
+    await status.edit_text(
+        "❌ Compression Failed"
+    )
+    return
 
         user_files[uid]["output_file"] = str(output_file)
 
