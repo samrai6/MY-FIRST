@@ -7,18 +7,27 @@ import subprocess
 import time
 import asyncio
 import json
+import os
 
-from config import DOWNLOAD_DIR
+from config import DOWNLOAD_DIR, OWNER_ID, THUMB_FILE_ID
+
 
 user_files = {}
 
 SETTINGS_FILE = "compress_settings.json"
+THUMB_SETTINGS_FILE = "thumbnail.json"
+THUMB_FILE = str(Path(DOWNLOAD_DIR) / "thumbnail.jpg")
 
+
+# =========================
+# COMPRESS SETTINGS
+# =========================
 
 def load_compress_settings():
     try:
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f)
+
     except:
         return {
             "vcodec": "libx264",
@@ -26,6 +35,66 @@ def load_compress_settings():
             "pix_fmt": "yuv420p"
         }
 
+
+# =========================
+# THUMBNAIL SETTINGS
+# =========================
+
+def load_thumbnail_file_id():
+    # Environment variable has priority
+    if THUMB_FILE_ID:
+        return THUMB_FILE_ID
+
+    try:
+        with open(THUMB_SETTINGS_FILE, "r") as f:
+            data = json.load(f)
+
+        return data.get("file_id")
+
+    except:
+        return None
+
+
+def save_thumbnail_file_id(file_id):
+    with open(THUMB_SETTINGS_FILE, "w") as f:
+        json.dump(
+            {
+                "file_id": file_id
+            },
+            f
+        )
+
+
+async def get_thumbnail(client):
+    file_id = load_thumbnail_file_id()
+
+    if not file_id:
+        return None
+
+    try:
+        # If thumbnail already exists, use it
+        if os.path.exists(THUMB_FILE):
+            return THUMB_FILE
+
+        Path(DOWNLOAD_DIR).mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        downloaded = await client.download_media(
+            file_id,
+            file_name=THUMB_FILE
+        )
+
+        return downloaded
+
+    except Exception:
+        return None
+
+
+# =========================
+# DOWNLOAD DIRECTORY
+# =========================
 
 Path(DOWNLOAD_DIR).mkdir(
     parents=True,
@@ -38,6 +107,65 @@ async def download_file(client, message):
         file_name=DOWNLOAD_DIR
     )
 
+
+# =========================
+# SET THUMBNAIL
+# =========================
+
+@Client.on_message(
+    filters.command("setthumb") & filters.private
+)
+async def set_thumb_command(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        await message.reply_text(
+            "❌ You are not authorized to use this command."
+        )
+        return
+
+    await message.reply_text(
+        "🖼 Send the photo you want to use as thumbnail."
+    )
+
+
+@Client.on_message(
+    filters.photo & filters.private
+)
+async def save_thumbnail(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    file_id = message.photo.file_id
+
+    save_thumbnail_file_id(file_id)
+
+    # Download immediately
+    try:
+        Path(DOWNLOAD_DIR).mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        if os.path.exists(THUMB_FILE):
+            os.remove(THUMB_FILE)
+
+        await message.download(
+            file_name=THUMB_FILE
+        )
+
+    except Exception:
+        pass
+
+    await message.reply_text(
+        "✅ Thumbnail saved successfully!\n\n"
+        "🎬 This thumbnail will be used automatically for video uploads."
+    )
+
+
+# =========================
+# FILE RECEIVED
+# =========================
 
 @Client.on_message(
     filters.document |
@@ -60,17 +188,34 @@ async def file_handler(client, message):
     )
 
 
-@Client.on_message(filters.text & ~filters.command("start"))
+# =========================
+# GET NEW FILE NAME
+# =========================
+
+@Client.on_message(
+    filters.text &
+    ~filters.command("start") &
+    ~filters.command("setthumb")
+)
 async def get_new_name(client, message):
 
     uid = message.from_user.id
+
+    # Ignore commands
+    if message.text.startswith("/"):
+        return
 
     if uid not in user_files:
         return
 
     new_name = message.text.strip()
 
-    await message.reply_text("⬇️ Downloading...")
+    if not new_name:
+        return
+
+    await message.reply_text(
+        "⬇️ Downloading..."
+    )
 
     file_path = await download_file(
         client,
@@ -109,8 +254,14 @@ async def get_new_name(client, message):
     )
 
 
+# =========================
+# CALLBACK HANDLER
+# =========================
+
 @Client.on_callback_query(
-    filters.regex("^(compress|compress_|rename_only|upload_)")
+    filters.regex(
+        "^(compress|compress_|rename_only|upload_)"
+    )
 )
 async def action_handler(client, query: CallbackQuery):
 
@@ -119,12 +270,20 @@ async def action_handler(client, query: CallbackQuery):
     if uid not in user_files:
         return
 
+    # =========================
+    # RENAME ONLY
+    # =========================
+
     if query.data == "rename_only":
 
         await query.message.reply_document(
             document=user_files[uid]["file_path"],
             caption="📄 Rename completed ✅"
         )
+
+    # =========================
+    # COMPRESS MENU
+    # =========================
 
     elif query.data == "compress":
 
@@ -133,16 +292,32 @@ async def action_handler(client, query: CallbackQuery):
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("360p", callback_data="compress_360"),
-                        InlineKeyboardButton("480p", callback_data="compress_480")
+                        InlineKeyboardButton(
+                            "360p",
+                            callback_data="compress_360"
+                        ),
+                        InlineKeyboardButton(
+                            "480p",
+                            callback_data="compress_480"
+                        )
                     ],
                     [
-                        InlineKeyboardButton("720p", callback_data="compress_720"),
-                        InlineKeyboardButton("1080p", callback_data="compress_1080")
+                        InlineKeyboardButton(
+                            "720p",
+                            callback_data="compress_720"
+                        ),
+                        InlineKeyboardButton(
+                            "1080p",
+                            callback_data="compress_1080"
+                        )
                     ]
                 ]
             )
         )
+
+    # =========================
+    # COMPRESS
+    # =========================
 
     elif query.data.startswith("compress_"):
 
@@ -157,7 +332,7 @@ async def action_handler(client, query: CallbackQuery):
         )
 
         settings = load_compress_settings()
-        
+
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -187,7 +362,7 @@ async def action_handler(client, query: CallbackQuery):
             "+faststart",
             "-y",
             str(output_file)
-    ]
+        ]
 
         process = subprocess.Popen(
             cmd,
@@ -218,10 +393,13 @@ async def action_handler(client, query: CallbackQuery):
                     duration_cmd
                 ).decode().strip()
             )
+
         except:
+
             await status.edit_text(
                 "❌ Unable to read video duration."
             )
+
             process.kill()
             return
 
@@ -245,6 +423,7 @@ async def action_handler(client, query: CallbackQuery):
 
                 try:
                     current = int(value) / 1000000
+
                 except ValueError:
                     continue
 
@@ -258,6 +437,7 @@ async def action_handler(client, query: CallbackQuery):
                 )
 
                 try:
+
                     await status.edit_text(
                         f"🗜 Compressing {quality}p...\n\n"
                         f"📊 Progress: {percent}%\n"
@@ -265,10 +445,13 @@ async def action_handler(client, query: CallbackQuery):
                         f"⚙️ Codec: {settings['vcodec']}\n"
                         f"⏱ Elapsed: {elapsed}s"
                     )
+
                 except:
                     pass
 
-        await asyncio.to_thread(process.wait)
+        await asyncio.to_thread(
+            process.wait
+        )
 
         elapsed = int(
             time.time() - start
@@ -279,9 +462,12 @@ async def action_handler(client, query: CallbackQuery):
             await status.edit_text(
                 "❌ Compression Failed"
             )
+
             return
 
-        user_files[uid]["output_file"] = str(output_file)
+        user_files[uid]["output_file"] = str(
+            output_file
+        )
 
         await status.edit_text(
             f"✅ Compression Done\n\n"
@@ -303,7 +489,11 @@ async def action_handler(client, query: CallbackQuery):
                     ]
                 ]
             )
-            )
+        )
+
+    # =========================
+    # UPLOAD DOCUMENT
+    # =========================
 
     elif query.data == "upload_document":
 
@@ -312,9 +502,25 @@ async def action_handler(client, query: CallbackQuery):
             caption="📄 Upload completed ✅"
         )
 
+    # =========================
+    # UPLOAD VIDEO + THUMB
+    # =========================
+
     elif query.data == "upload_video":
 
-        await query.message.reply_video(
-            video=user_files[uid]["output_file"],
-            caption="🎬 Upload completed ✅"
-        )
+        thumbnail = await get_thumbnail(client)
+
+        if thumbnail:
+
+            await query.message.reply_video(
+                video=user_files[uid]["output_file"],
+                thumb=thumbnail,
+                caption="🎬 Upload completed ✅"
+            )
+
+        else:
+
+            await query.message.reply_video(
+                video=user_files[uid]["output_file"],
+                caption="🎬 Upload completed ✅"
+            )
