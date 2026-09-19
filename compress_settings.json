@@ -1,5 +1,6 @@
 {
-  "vcodec": "libx264",
-  "crf": 24,
-  "pix_fmt": "yuv420p"
+    "vcodec": "libx264",
+    "crf": 24,
+    "pix_fmt": "yuv420p",
+    "upload_mode": "video"
 }
