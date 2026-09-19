@@ -38,9 +38,11 @@ def load_compress_settings():
     }
 
     try:
-
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
+
+        if not isinstance(data, dict):
+            data = {}
 
         for key, value in default.items():
             data.setdefault(key, value)
@@ -48,7 +50,6 @@ def load_compress_settings():
         return data
 
     except Exception:
-
         return default
 
 
@@ -57,16 +58,10 @@ def get_upload_mode():
     settings = load_compress_settings()
 
     mode = str(
-        settings.get(
-            "upload_mode",
-            "video"
-        )
+        settings.get("upload_mode", "video")
     ).strip().lower()
 
-    if mode not in (
-        "video",
-        "document"
-    ):
+    if mode not in ("video", "document"):
         mode = "video"
 
     return mode
@@ -82,28 +77,30 @@ def load_thumbnail_file_id():
         return THUMB_FILE_ID
 
     try:
-
         with open(THUMB_SETTINGS_FILE, "r") as f:
             data = json.load(f)
 
         return data.get("file_id")
 
     except Exception:
-
         return None
 
 
 def save_thumbnail_file_id(file_id):
 
     try:
+        Path(THUMB_SETTINGS_FILE).parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
 
         with open(THUMB_SETTINGS_FILE, "w") as f:
-
             json.dump(
                 {
                     "file_id": file_id
                 },
-                f
+                f,
+                indent=4
             )
 
     except Exception:
@@ -119,22 +116,26 @@ async def get_thumbnail(client):
 
     try:
 
-        if os.path.exists(THUMB_FILE):
-            return THUMB_FILE
-
         Path(DOWNLOAD_DIR).mkdir(
             parents=True,
             exist_ok=True
         )
 
-        return await client.download_media(
+        if os.path.exists(THUMB_FILE):
+            return THUMB_FILE
+
+        result = await client.download_media(
             file_id,
             file_name=THUMB_FILE
         )
 
-    except Exception:
+        if result and os.path.exists(THUMB_FILE):
+            return THUMB_FILE
 
-        return None
+    except Exception:
+        pass
+
+    return None
 
 
 # =========================
@@ -159,10 +160,7 @@ async def download_file(client, message):
 
 
 # =========================
-# UPLOAD FUNCTION
-# =========================
-# /setting upload_mode is used
-# for BOTH Rename Only + Compress
+# UPLOAD
 # =========================
 
 async def upload_file(
@@ -174,6 +172,12 @@ async def upload_file(
 
     upload_mode = get_upload_mode()
 
+    file_path = Path(file_path)
+    file_name = file_path.name
+
+    # Filename shown as caption
+    caption = f"📄 `{file_name}`"
+
     # =========================
     # VIDEO MODE
     # =========================
@@ -182,25 +186,28 @@ async def upload_file(
 
         try:
 
-            if thumbnail:
+            if thumbnail and os.path.exists(thumbnail):
 
                 try:
 
                     await message.reply_video(
                         video=str(file_path),
-                        thumb=thumbnail
+                        thumb=thumbnail,
+                        caption=caption
                     )
 
                 except Exception:
 
                     await message.reply_video(
-                        video=str(file_path)
+                        video=str(file_path),
+                        caption=caption
                     )
 
             else:
 
                 await message.reply_video(
-                    video=str(file_path)
+                    video=str(file_path),
+                    caption=caption
                 )
 
             return True
@@ -208,14 +215,14 @@ async def upload_file(
         except Exception:
 
             # =========================
-            # VIDEO FAILED
             # FALLBACK DOCUMENT
             # =========================
 
             try:
 
                 await message.reply_document(
-                    document=str(file_path)
+                    document=str(file_path),
+                    caption=caption
                 )
 
                 return True
@@ -230,8 +237,24 @@ async def upload_file(
 
     try:
 
+        if thumbnail and os.path.exists(thumbnail):
+
+            try:
+
+                await message.reply_document(
+                    document=str(file_path),
+                    thumb=thumbnail,
+                    caption=caption
+                )
+
+                return True
+
+            except Exception:
+                pass
+
         await message.reply_document(
-            document=str(file_path)
+            document=str(file_path),
+            caption=caption
         )
 
         return True
@@ -242,7 +265,7 @@ async def upload_file(
 
 
 # =========================
-# SET THUMB COMMAND
+# SET THUMB
 # =========================
 
 @Client.on_message(
@@ -277,9 +300,7 @@ async def save_thumbnail(client, message):
 
     file_id = message.photo.file_id
 
-    save_thumbnail_file_id(
-        file_id
-    )
+    save_thumbnail_file_id(file_id)
 
     try:
 
@@ -291,17 +312,21 @@ async def save_thumbnail(client, message):
         if os.path.exists(THUMB_FILE):
             os.remove(THUMB_FILE)
 
-        await message.download(
+        downloaded = await message.download(
             file_name=THUMB_FILE
         )
+
+        if downloaded and os.path.exists(THUMB_FILE):
+            pass
 
     except Exception:
         pass
 
     await message.reply_text(
-        "✅ Thumbnail saved successfully!\n\n"
+        "✅ Thumbnail saved permanently!\n\n"
         "🎬 Video + 📄 Document\n"
-        "🖼 This thumbnail will be used automatically."
+        "🖼 Same thumbnail will be used automatically.\n\n"
+        "You don't need to set it again."
     )
 
 
@@ -318,9 +343,7 @@ async def save_thumbnail(client, message):
 )
 async def file_handler(client, message):
 
-    user_files[
-        message.from_user.id
-    ] = {
+    user_files[message.from_user.id] = {
 
         "message": message,
 
@@ -385,16 +408,11 @@ async def get_new_name(client, message):
             f"❌ Download failed.\n\n{e}"
         )
 
-        user_files.pop(
-            uid,
-            None
-        )
+        user_files.pop(uid, None)
 
         return
 
-    old_file = Path(
-        file_path
-    )
+    old_file = Path(file_path)
 
     # =========================
     # PRESERVE EXTENSION
@@ -426,9 +444,7 @@ async def get_new_name(client, message):
             if new_file.exists():
                 new_file.unlink()
 
-            old_file.rename(
-                new_file
-            )
+            old_file.rename(new_file)
 
     except Exception as e:
 
@@ -444,18 +460,11 @@ async def get_new_name(client, message):
         except Exception:
             pass
 
-        user_files.pop(
-            uid,
-            None
-        )
+        user_files.pop(uid, None)
 
         return
 
-    user_files[uid]["file_path"] = str(
-        new_file
-    )
-
-    # Reset cancellation state
+    user_files[uid]["file_path"] = str(new_file)
     user_files[uid]["cancelled"] = False
 
     await message.reply_text(
@@ -522,9 +531,7 @@ async def action_handler(
 
         data["cancelled"] = True
 
-        process = data.get(
-            "process"
-        )
+        process = data.get("process")
 
         if process:
 
@@ -573,13 +580,7 @@ async def action_handler(
 
             return
 
-        source = Path(
-            file_path
-        )
-
-        # =========================
-        # CURRENT SETTING
-        # =========================
+        source = Path(file_path)
 
         upload_mode = get_upload_mode()
 
@@ -591,8 +592,10 @@ async def action_handler(
 
             await query.message.edit_text(
                 "✏️ Rename Only\n\n"
+                f"📄 `{source.name}`\n"
                 f"📤 Upload Mode: "
                 f"{'🎬 Video' if upload_mode == 'video' else '📄 Document'}\n\n"
+                "🔧 Adding metadata...\n"
                 "📤 Uploading..."
             )
 
@@ -603,14 +606,11 @@ async def action_handler(
         # THUMBNAIL
         # =========================
 
-        thumbnail = await get_thumbnail(
-            client
-        )
+        thumbnail = await get_thumbnail(client)
 
-        # ==================================================
-        # ADD @SKR METADATA
-        # WITHOUT RE-ENCODING
-        # ==================================================
+        # =========================
+        # VIDEO EXTENSIONS
+        # =========================
 
         video_extensions = (
             ".mp4",
@@ -622,11 +622,16 @@ async def action_handler(
             ".ts"
         )
 
-        metadata_file = source.with_name(
-            f"{source.stem}_metadata{source.suffix}"
-        )
+        # ==================================================
+        # METADATA REMUX
+        # NO RE-ENCODING
+        # ==================================================
 
         if source.suffix.lower() in video_extensions:
+
+            metadata_file = source.with_name(
+                f".{source.stem}_metadata{source.suffix}"
+            )
 
             metadata_cmd = [
 
@@ -660,13 +665,9 @@ async def action_handler(
             try:
 
                 result = await asyncio.to_thread(
-
                     subprocess.run,
-
                     metadata_cmd,
-
                     stdout=subprocess.DEVNULL,
-
                     stderr=subprocess.PIPE
                 )
 
@@ -681,8 +682,31 @@ async def action_handler(
                         source
                     )
 
-            except Exception:
-                pass
+                else:
+
+                    error_text = ""
+
+                    if result.stderr:
+                        error_text = result.stderr.decode(
+                            "utf-8",
+                            errors="ignore"
+                        ).strip()
+
+                    # Don't stop upload just because
+                    # container doesn't support the tag
+                    if error_text:
+
+                        print(
+                            "Metadata warning:",
+                            error_text
+                        )
+
+            except Exception as e:
+
+                print(
+                    "Metadata exception:",
+                    e
+                )
 
             finally:
 
@@ -730,10 +754,7 @@ async def action_handler(
         except Exception:
             pass
 
-        user_files.pop(
-            uid,
-            None
-        )
+        user_files.pop(uid, None)
 
         return
 
@@ -789,10 +810,6 @@ async def action_handler(
             1
         )[1]
 
-        # =========================
-        # VALID QUALITY
-        # =========================
-
         if quality not in (
             "360",
             "480",
@@ -818,10 +835,6 @@ async def action_handler(
 
             return
 
-        # =========================
-        # RESET CANCEL
-        # =========================
-
         user_files[uid]["cancelled"] = False
 
         # =========================
@@ -832,7 +845,6 @@ async def action_handler(
             f"{input_path.stem}_{quality}p.mp4"
         )
 
-        # Remove old output if exists
         try:
 
             if output_file.exists():
@@ -887,11 +899,8 @@ async def action_handler(
         try:
 
             duration_result = await asyncio.to_thread(
-
                 subprocess.check_output,
-
                 duration_cmd,
-
                 stderr=subprocess.DEVNULL
             )
 
@@ -932,6 +941,12 @@ async def action_handler(
             "-i",
             str(input_path),
 
+            "-map",
+            "0:v:0",
+
+            "-map",
+            "0:a?",
+
             "-vf",
             f"scale=-2:{quality}",
 
@@ -953,13 +968,19 @@ async def action_handler(
             "-b:a",
             "96k",
 
-            # Preserve original metadata
+            # =========================
+            # METADATA
+            # =========================
+
             "-map_metadata",
             "0",
 
-            # Permanent metadata
             "-metadata",
             f"comment={PERMANENT_METADATA}",
+
+            # =========================
+            # MP4
+            # =========================
 
             "-movflags",
             "+faststart",
@@ -979,64 +1000,4 @@ async def action_handler(
             f"🎬 Quality: {quality}p\n"
             f"🎞 Codec: {vcodec}\n"
             f"🎚 CRF: {crf}\n"
-            f"📤 Upload: "
-            f"{'🎬 Video' if upload_mode == 'video' else '📄 Document'}\n\n"
-            "📊 Progress: 0%\n"
-            "⏱ Elapsed: 0s",
-
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🛑 Cancel",
-                            callback_data="cancel_compress"
-                        )
-                    ]
-                ]
-            )
-        )
-
-        # =========================
-        # START FFMPEG
-        # =========================
-
-        try:
-
-            process = await asyncio.create_subprocess_exec(
-
-                *cmd,
-
-                stdout=asyncio.subprocess.PIPE,
-
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            user_files[uid]["process"] = process
-
-        except Exception as e:
-
-            await status.edit_text(
-                f"❌ FFmpeg failed to start.\n\n{e}"
-            )
-
-            return
-
-        start = time.time()
-
-        last_percent = -1
-
-        last_update = 0
-
-        # =========================
-        # PROGRESS
-        # =========================
-
-        while True:
-
-            line = await process.stdout.readline()
-
-            if not line:
-                break
-
-            # =========================
-            # 
+            f"?
