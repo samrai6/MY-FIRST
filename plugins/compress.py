@@ -167,9 +167,6 @@ def build_ffmpeg_command(
     ):
         codec = "libx264"
 
-    # 10-bit pixel format can fail with some
-    # combinations. Keep configured value but
-    # fallback is handled by FFmpeg failure.
     if not isinstance(pix_fmt, str):
         pix_fmt = "yuv420p"
 
@@ -198,6 +195,8 @@ def build_ffmpeg_command(
 
         "-c:a", "aac",
         "-b:a", "128k",
+
+        "-metadata", "comment=@SKR",
 
         "-movflags", "+faststart",
 
@@ -254,7 +253,15 @@ async def compress_file(
         settings
     )
 
+    # Check cancellation before waiting
+    if cancel_event and cancel_event.is_set():
+        raise asyncio.CancelledError()
+
     async with COMPRESSION_LOCK:
+
+        # Check cancellation again after acquiring lock
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError()
 
         start_time = time.monotonic()
         last_update = 0
@@ -272,7 +279,8 @@ async def compress_file(
                 if cancel_event and cancel_event.is_set():
 
                     try:
-                        process.kill()
+                        if process.returncode is None:
+                            process.kill()
                     except Exception:
                         pass
 
@@ -283,7 +291,6 @@ async def compress_file(
                 line = await process.stdout.readline()
 
                 if not line:
-
                     break
 
                 line = line.decode(
@@ -315,7 +322,8 @@ async def compress_file(
                     )
                 )
 
-                                now = time.monotonic()
+                # FIXED INDENTATION
+                now = time.monotonic()
 
                 if (
                     now - last_update < 2
