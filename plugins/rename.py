@@ -261,8 +261,7 @@ async def get_new_name(client, message):
     # RENAME / EXTENSION
     # =========================
 
-    # User gives:
-    # Movie       -> Movie.original_extension
+    # Movie       -> Movie.mkv
     # Movie.mp4   -> Movie.mp4
     # Movie.mkv   -> Movie.mkv
 
@@ -531,15 +530,16 @@ async def action_handler(
 
             return
 
-        # Always MP4 after compression
+        # Always create MP4
         output_file = input_path.with_name(
             f"{input_path.stem}_{quality}p.mp4"
         )
 
         settings = load_compress_settings()
 
+
         # =========================
-        # NORMALIZE UPLOAD MODE
+        # UPLOAD MODE
         # =========================
 
         upload_mode = str(
@@ -711,6 +711,7 @@ async def action_handler(
         start = time.time()
 
         last_percent = -1
+
         last_update = 0
 
 
@@ -738,6 +739,7 @@ async def action_handler(
             if not line.startswith(
                 "out_time_ms="
             ):
+
                 continue
 
             value = line.split(
@@ -790,9 +792,7 @@ async def action_handler(
                     await status.edit_text(
 
                         f"🗜 Compressing {quality}p...\n\n"
-
                         f"📊 Progress: {percent}%\n"
-
                         f"⏱ Elapsed: {elapsed}s",
 
                         reply_markup=InlineKeyboardMarkup(
@@ -808,6 +808,7 @@ async def action_handler(
                     )
 
                     last_percent = percent
+
                     last_update = now
 
                 except Exception:
@@ -946,11 +947,8 @@ async def action_handler(
             await status.edit_text(
 
                 f"✅ Compression Done\n\n"
-
                 f"🎬 Quality: {quality}p\n"
-
                 f"⏱ Time: {elapsed}s\n\n"
-
                 f"📤 Uploading..."
             )
 
@@ -1015,4 +1013,60 @@ async def action_handler(
 
                     except Exception:
 
-                        await query.message.r
+                        await query.message.reply_document(
+                            document=str(output_file)
+                        )
+
+                else:
+
+                    await query.message.reply_document(
+                        document=str(output_file)
+                    )
+
+            except Exception as e:
+
+                await status.edit_text(
+                    f"❌ Document upload failed.\n\n{e}"
+                )
+
+                return
+
+
+        # =========================
+        # FINAL
+        # =========================
+
+        try:
+
+            await status.edit_text(
+                f"✅ Done • {quality}p • {elapsed}s"
+            )
+
+        except Exception:
+            pass
+
+
+        # =========================
+        # CLEANUP
+        # =========================
+
+        try:
+
+            if input_path.exists():
+                input_path.unlink()
+
+        except Exception:
+            pass
+
+        try:
+
+            if output_file.exists():
+                output_file.unlink()
+
+        except Exception:
+            pass
+
+        user_files.pop(
+            uid,
+            None
+        )
