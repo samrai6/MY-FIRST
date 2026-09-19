@@ -23,7 +23,6 @@ THUMB_FILE = str(Path(DOWNLOAD_DIR) / "thumbnail.jpg")
 # =========================
 
 def load_compress_settings():
-
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
@@ -36,7 +35,6 @@ def load_compress_settings():
         return data
 
     except Exception:
-
         return {
             "vcodec": "libx264",
             "crf": 24,
@@ -260,8 +258,13 @@ async def get_new_name(client, message):
     old_file = Path(file_path)
 
     # =========================
-    # EXTENSION FIX
+    # RENAME / EXTENSION
     # =========================
+
+    # User gives:
+    # Movie       -> Movie.original_extension
+    # Movie.mp4   -> Movie.mp4
+    # Movie.mkv   -> Movie.mkv
 
     if Path(new_name).suffix:
 
@@ -292,6 +295,17 @@ async def get_new_name(client, message):
             f"❌ Rename failed.\n\n{e}"
         )
 
+        try:
+            if old_file.exists():
+                old_file.unlink()
+        except Exception:
+            pass
+
+        user_files.pop(
+            uid,
+            None
+        )
+
         return
 
     user_files[uid]["file_path"] = str(
@@ -300,6 +314,8 @@ async def get_new_name(client, message):
 
     await message.reply_text(
 
+        "✏️ Rename completed!\n\n"
+        f"📄 `{new_file.name}`\n\n"
         "Choose action:",
 
         reply_markup=InlineKeyboardMarkup(
@@ -360,9 +376,7 @@ async def action_handler(
 
         data["cancelled"] = True
 
-        process = data.get(
-            "process"
-        )
+        process = data.get("process")
 
         if process:
 
@@ -517,11 +531,30 @@ async def action_handler(
 
             return
 
+        # Always MP4 after compression
         output_file = input_path.with_name(
-            f"{input_path.stem}_{quality}p{input_path.suffix}"
+            f"{input_path.stem}_{quality}p.mp4"
         )
 
         settings = load_compress_settings()
+
+        # =========================
+        # NORMALIZE UPLOAD MODE
+        # =========================
+
+        upload_mode = str(
+            settings.get(
+                "upload_mode",
+                "video"
+            )
+        ).strip().lower()
+
+        if upload_mode not in (
+            "video",
+            "document"
+        ):
+
+            upload_mode = "video"
 
 
         # =========================
@@ -792,7 +825,6 @@ async def action_handler(
             try:
 
                 if process.returncode is None:
-
                     process.kill()
 
                 await process.wait()
@@ -897,18 +929,17 @@ async def action_handler(
 
 
         # =========================
-        # UPLOAD
+        # THUMBNAIL
         # =========================
-
-        upload_mode = settings.get(
-            "upload_mode",
-            "video"
-        )
 
         thumbnail = await get_thumbnail(
             client
         )
 
+
+        # =========================
+        # UPLOADING
+        # =========================
 
         try:
 
@@ -984,60 +1015,4 @@ async def action_handler(
 
                     except Exception:
 
-                        await query.message.reply_document(
-                            document=str(output_file)
-                        )
-
-                else:
-
-                    await query.message.reply_document(
-                        document=str(output_file)
-                    )
-
-            except Exception as e:
-
-                await status.edit_text(
-                    f"❌ Document upload failed.\n\n{e}"
-                )
-
-                return
-
-
-        # =========================
-        # FINAL
-        # =========================
-
-        try:
-
-            await status.edit_text(
-                f"✅ Done • {quality}p • {elapsed}s"
-            )
-
-        except Exception:
-            pass
-
-
-        # =========================
-        # CLEANUP
-        # =========================
-
-        try:
-
-            if input_path.exists():
-                input_path.unlink()
-
-        except Exception:
-            pass
-
-        try:
-
-            if output_file.exists():
-                output_file.unlink()
-
-        except Exception:
-            pass
-
-        user_files.pop(
-            uid,
-            None
-        )
+                        await query.message.r
