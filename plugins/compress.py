@@ -315,4 +315,172 @@ async def compress_file(
                     )
                 )
 
-                now
+                                now = time.monotonic()
+
+                if (
+                    now - last_update < 2
+                    and percent < 100
+                ):
+                    continue
+
+                last_update = now
+
+                elapsed = max(
+                    now - start_time,
+                    0.001
+                )
+
+                speed = current / elapsed
+
+                eta = 0
+
+                if speed > 0:
+                    eta = max(
+                        duration - current,
+                        0
+                    ) / speed
+
+                bar = progress_bar(percent)
+
+                text = (
+                    f"🗜️ Compressing {quality}p...\n\n"
+                    f"[{bar}] {percent:.1f}%\n\n"
+                    f"📐 Resolution: {width}x{height}\n"
+                    f"🎬 Codec: "
+                    f"{settings.get('vcodec', 'libx264')}\n"
+                    f"🎚 CRF: "
+                    f"{settings.get('crf', 24)}\n"
+                    f"⚡ Speed: "
+                    f"{speed:.2f}x\n"
+                    f"⏳ ETA: "
+                    f"{human_time(eta)}\n"
+                    f"🕐 Elapsed: "
+                    f"{human_time(elapsed)}"
+                )
+
+                try:
+                    await status_message.edit_text(
+                        text
+                    )
+                except Exception:
+                    pass
+
+            stderr_data = await process.stderr.read()
+
+            return_code = await process.wait()
+
+            if return_code != 0:
+
+                error_text = stderr_data.decode(
+                    "utf-8",
+                    errors="ignore"
+                ).strip()
+
+                raise RuntimeError(
+                    error_text or
+                    "FFmpeg compression failed."
+                )
+
+            if not output_file.exists():
+                raise RuntimeError(
+                    "FFmpeg finished but output "
+                    "file was not created."
+                )
+
+            if output_file.stat().st_size <= 0:
+                raise RuntimeError(
+                    "Output file is empty."
+                )
+
+            elapsed = time.monotonic() - start_time
+
+            try:
+                await status_message.edit_text(
+                    f"🗜️ Compression completed!\n\n"
+                    f"📄 `{output_file.name}`\n"
+                    f"📐 {width}x{height}\n"
+                    f"📦 {human_size(output_file.stat().st_size)}\n"
+                    f"🕐 Elapsed: "
+                    f"{human_time(elapsed)}"
+                )
+            except Exception:
+                pass
+
+            return {
+                "success": True,
+                "output": str(output_file),
+                "width": width,
+                "height": height,
+                "quality": quality,
+                "size": output_file.stat().st_size,
+                "elapsed": elapsed
+            }
+
+        except asyncio.CancelledError:
+
+            if process:
+                try:
+                    if process.returncode is None:
+                        process.kill()
+                except Exception:
+                    pass
+
+                try:
+                    await process.wait()
+                except Exception:
+                    pass
+
+            try:
+                if output_file.exists():
+                    output_file.unlink()
+            except Exception:
+                pass
+
+            try:
+                await status_message.edit_text(
+                    "🛑 Compression cancelled."
+                )
+            except Exception:
+                pass
+
+            raise
+
+        except Exception:
+
+            if process:
+                try:
+                    if process.returncode is None:
+                        process.kill()
+                except Exception:
+                    pass
+
+                try:
+                    await process.wait()
+                except Exception:
+                    pass
+
+            try:
+                if output_file.exists():
+                    output_file.unlink()
+            except Exception:
+                pass
+
+            raise
+
+
+# =========================
+# CLEANUP
+# =========================
+
+def cleanup_file(file_path):
+    if not file_path:
+        return
+
+    try:
+        path = Path(file_path)
+
+        if path.exists():
+            path.unlink()
+
+    except Exception:
+        pass
