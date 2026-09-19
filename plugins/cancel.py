@@ -2,7 +2,6 @@ import asyncio
 
 from pyrogram import Client, filters
 
-from .compress import COMPRESSION_LOCK
 
 
 # =========================
