@@ -1,7 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-from pathlib import Path
+from pathlib import Path.
 import subprocess
 import time
 import asyncio
