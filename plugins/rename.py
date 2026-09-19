@@ -368,14 +368,20 @@ async def action_handler(
 
             try:
 
-                process.kill()
+                if process.returncode is None:
+                    process.kill()
 
             except Exception:
                 pass
 
-        await query.message.edit_text(
-            "🛑 Cancelling compression..."
-        )
+        try:
+
+            await query.message.edit_text(
+                "🛑 Cancelling compression..."
+            )
+
+        except Exception:
+            pass
 
         return
 
@@ -789,7 +795,7 @@ async def action_handler(
 
                     process.kill()
 
-                    await process.wait()
+                await process.wait()
 
             except Exception:
                 pass
@@ -818,7 +824,7 @@ async def action_handler(
             try:
 
                 await status.edit_text(
-                    "🛑 Compression Cancelled"
+                    "❌ Compression Cancelled"
                 )
 
             except Exception:
@@ -872,6 +878,10 @@ async def action_handler(
             return
 
 
+        # =========================
+        # OUTPUT CHECK
+        # =========================
+
         if not output_file.exists():
 
             await status.edit_text(
@@ -900,16 +910,21 @@ async def action_handler(
         )
 
 
-        await status.edit_text(
+        try:
 
-            f"✅ Compression Done\n\n"
+            await status.edit_text(
 
-            f"🎬 Quality: {quality}p\n"
+                f"✅ Compression Done\n\n"
 
-            f"⏱ Time: {elapsed}s\n\n"
+                f"🎬 Quality: {quality}p\n"
 
-            f"📤 Uploading..."
-        )
+                f"⏱ Time: {elapsed}s\n\n"
+
+                f"📤 Uploading..."
+            )
+
+        except Exception:
+            pass
 
 
         # =========================
@@ -1023,4 +1038,6 @@ async def action_handler(
             pass
 
         user_files.pop(
-            uid
+            uid,
+            None
+        )
