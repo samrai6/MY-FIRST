@@ -1,17 +1,30 @@
 from pathlib import Path
 
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 from config import DOWNLOAD_DIR
 from .file_utils import safe_filename, get_extension
 from .progress import make_download_callback, make_upload_callback
 from .thumbnail import get_thumbnail
+from .compress import compress_file
+
+
+# user_id -> pending file information
+PENDING_FILES = {}
+
+# Default compression quality
+DEFAULT_COMPRESSION_QUALITY = 720
 
 
 def build_renamed_filename(original_name, new_name):
     original_ext = get_extension(original_name)
 
-    new_name = safe_filename(new_name, default="file")
+    new_name = safe_filename(
+        new_name,
+        default="file"
+    )
+
     new_name = Path(new_name).stem
 
     if not new_name:
@@ -96,105 +109,321 @@ async def upload_file(status, file_path, thumbnail=None):
         return False
 
 
+def action_keyboard():
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✏️ Rename",
+                    callback_data="fileaction_rename"
+                ),
+                InlineKeyboardButton(
+                    "🗜️ Compress",
+                    callback_data="fileaction_compress"
+                )
+            ]
+        ]
+    )
+
+
+# =========================================================
+# STEP 1 — USER SENDS FILE
+# =========================================================
+
 @Client.on_message(
-    filters.command("rename")
+    (
+        filters.document
+        | filters.video
+        | filters.audio
+        | filters.animation
+    )
     & filters.private
 )
-async def rename_command(client, message):
-    reply = message.reply_to_message
+async def receive_file(client, message):
 
-    if not reply:
-        await message.reply_text(
-            "❌ Reply to a file/video and use:\n\n"
-            "/rename New Name"
-        )
+    user_id = message.from_user.id
+
+    PENDING_FILES[user_id] = {
+        "message": message,
+        "name": None
+    }
+
+    original_name = get_original_filename(message)
+
+    await message.reply_text(
+        "📁 File received!\n\n"
+        f"📄 Current name: `{original_name}`\n\n"
+        "✏️ Now send the new file name."
+    )
+
+
+# =========================================================
+# STEP 2 — USER SENDS NEW NAME
+# =========================================================
+
+@Client.on_message(
+    filters.text
+    & filters.private
+)
+async def receive_filename(client, message):
+
+    user_id = message.from_user.id
+
+    pending = PENDING_FILES.get(user_id)
+
+    if not pending:
         return
 
-    parts = (message.text or "").split(maxsplit=1)
-
-    if len(parts) < 2:
-        await message.reply_text(
-            "❌ Give a new filename.\n\n"
-            "Example:\n"
-            "/rename My Video"
-        )
-        return
-
-    new_name = parts[1].strip()
+    new_name = (message.text or "").strip()
 
     if not new_name:
+
         await message.reply_text(
-            "❌ Filename cannot be empty."
+            "❌ Filename cannot be empty.\n\n"
+            "Please send the new file name."
         )
+
         return
 
-    status = await message.reply_text(
-        "⬇️ Downloading..."
+    safe_name = safe_filename(
+        new_name,
+        default="file"
     )
+
+    if not Path(safe_name).stem:
+
+        await message.reply_text(
+            "❌ Invalid filename.\n\n"
+            "Please send another name."
+        )
+
+        return
+
+    pending["name"] = safe_name
+
+    await message.reply_text(
+        "✅ New name received.\n\n"
+        f"📄 `{safe_name}`\n\n"
+        "Choose what you want to do:",
+        reply_markup=action_keyboard()
+    )
+
+
+# =========================================================
+# STEP 3 — RENAME / COMPRESS
+# =========================================================
+
+@Client.on_callback_query(
+    filters.regex(
+        r"^fileaction_(rename|compress)$"
+    )
+)
+async def file_action(client, query: CallbackQuery):
+
+    user_id = query.from_user.id
+
+    pending = PENDING_FILES.get(user_id)
+
+    if not pending:
+
+        await query.answer(
+            "❌ This file request has expired.",
+            show_alert=True
+        )
+
+        return
+
+    action = query.data.split("_", 1)[1]
+
+    source_message = pending["message"]
+    new_name = pending["name"]
+
+    if not new_name:
+
+        await query.answer(
+            "❌ Filename is missing.",
+            show_alert=True
+        )
+
+        return
+
+    # Prevent double click
+    PENDING_FILES.pop(user_id, None)
+
+    await query.answer()
+
+    try:
+
+        await query.message.edit_text(
+            "⬇️ Downloading..."
+        )
+
+    except Exception:
+        pass
 
     input_file = None
     output_file = None
 
     try:
-        original_name = get_original_filename(reply)
+
+        # ---------------------------------------------
+        # ORIGINAL FILE NAME
+        # ---------------------------------------------
+
+        original_name = get_original_filename(
+            source_message
+        )
+
+        # ---------------------------------------------
+        # DOWNLOAD
+        # ---------------------------------------------
 
         input_file = await download_file(
-            status,
-            reply
+            query.message,
+            source_message
         )
 
         if not input_file:
-            raise RuntimeError("Download failed.")
+
+            raise RuntimeError(
+                "Download failed."
+            )
 
         input_path = Path(input_file)
+
+        # ---------------------------------------------
+        # OUTPUT NAME
+        # ---------------------------------------------
 
         output_name = build_renamed_filename(
             original_name,
             new_name
         )
 
-        output_file = input_path.parent / output_name
+        output_file = (
+            input_path.parent / output_name
+        )
 
         if output_file.exists():
             output_file.unlink()
 
-        input_path.rename(output_file)
+        # ---------------------------------------------
+        # RENAME
+        # ---------------------------------------------
 
-        thumbnail = await get_thumbnail(client)
+        if action == "rename":
 
-        await status.edit_text(
+            input_path.rename(
+                output_file
+            )
+
+        # ---------------------------------------------
+        # COMPRESS
+        # ---------------------------------------------
+
+        else:
+
+            await query.message.edit_text(
+                f"🗜️ Compressing "
+                f"{DEFAULT_COMPRESSION_QUALITY}p..."
+            )
+
+            result = await compress_file(
+                input_file=input_path,
+                output_file=output_file,
+                quality=DEFAULT_COMPRESSION_QUALITY,
+                status_message=query.message
+            )
+
+            if not result:
+
+                raise RuntimeError(
+                    "Compression failed."
+                )
+
+            if not result.get("success"):
+
+                raise RuntimeError(
+                    "Compression failed."
+                )
+
+            # Delete original after compression
+            try:
+
+                if input_path.exists():
+                    input_path.unlink()
+
+            except Exception:
+                pass
+
+        # ---------------------------------------------
+        # THUMBNAIL
+        # ---------------------------------------------
+
+        thumbnail = await get_thumbnail(
+            client
+        )
+
+        # ---------------------------------------------
+        # UPLOAD
+        # ---------------------------------------------
+
+        await query.message.edit_text(
             "📤 Uploading..."
         )
 
         success = await upload_file(
-            status,
+            query.message,
             output_file,
             thumbnail
         )
 
         if not success:
-            raise RuntimeError("Upload failed.")
 
+            raise RuntimeError(
+                "Upload failed."
+            )
+
+        # Delete progress message
         try:
-            await status.delete()
+
+            await query.message.delete()
+
         except Exception:
             pass
 
     except Exception as e:
-        print("Rename error:", e)
+
+        print(
+            f"{action.title()} error:",
+            e
+        )
 
         try:
-            await status.edit_text(
-                "❌ Rename failed.\n\n"
-                + str(e)[:3000]
+
+            await query.message.edit_text(
+                f"❌ {action.title()} failed.\n\n"
+                f"{str(e)[:3000]}"
             )
+
         except Exception:
             pass
 
     finally:
-        for path in (input_file, output_file):
+
+        # ---------------------------------------------
+        # CLEANUP
+        # ---------------------------------------------
+
+        for path in (
+            input_file,
+            output_file
+        ):
+
             try:
+
                 if path:
+
                     file_path = Path(path)
 
                     if file_path.exists():
