@@ -38,6 +38,7 @@ def load_compress_settings():
     }
 
     try:
+
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
 
@@ -77,6 +78,7 @@ def load_thumbnail_file_id():
         return THUMB_FILE_ID
 
     try:
+
         with open(THUMB_SETTINGS_FILE, "r") as f:
             data = json.load(f)
 
@@ -89,12 +91,14 @@ def load_thumbnail_file_id():
 def save_thumbnail_file_id(file_id):
 
     try:
+
         Path(THUMB_SETTINGS_FILE).parent.mkdir(
             parents=True,
             exist_ok=True
         )
 
         with open(THUMB_SETTINGS_FILE, "w") as f:
+
             json.dump(
                 {
                     "file_id": file_id
@@ -103,8 +107,12 @@ def save_thumbnail_file_id(file_id):
                 indent=4
             )
 
-    except Exception:
-        pass
+    except Exception as e:
+
+        print(
+            "Thumbnail save error:",
+            e
+        )
 
 
 async def get_thumbnail(client):
@@ -122,6 +130,7 @@ async def get_thumbnail(client):
         )
 
         if os.path.exists(THUMB_FILE):
+
             return THUMB_FILE
 
         result = await client.download_media(
@@ -129,11 +138,19 @@ async def get_thumbnail(client):
             file_name=THUMB_FILE
         )
 
-        if result and os.path.exists(THUMB_FILE):
+        if (
+            result
+            and os.path.exists(THUMB_FILE)
+        ):
+
             return THUMB_FILE
 
-    except Exception:
-        pass
+    except Exception as e:
+
+        print(
+            "Thumbnail download error:",
+            e
+        )
 
     return None
 
@@ -152,7 +169,10 @@ Path(DOWNLOAD_DIR).mkdir(
 # DOWNLOAD
 # =========================
 
-async def download_file(client, message):
+async def download_file(
+    client,
+    message
+):
 
     return await message.download(
         file_name=DOWNLOAD_DIR
@@ -173,9 +193,9 @@ async def upload_file(
     upload_mode = get_upload_mode()
 
     file_path = Path(file_path)
+
     file_name = file_path.name
 
-    # Filename shown as caption
     caption = f"📄 `{file_name}`"
 
     # =========================
@@ -186,7 +206,10 @@ async def upload_file(
 
         try:
 
-            if thumbnail and os.path.exists(thumbnail):
+            if (
+                thumbnail
+                and os.path.exists(thumbnail)
+            ):
 
                 try:
 
@@ -212,7 +235,12 @@ async def upload_file(
 
             return True
 
-        except Exception:
+        except Exception as e:
+
+            print(
+                "Video upload failed:",
+                e
+            )
 
             # =========================
             # FALLBACK DOCUMENT
@@ -227,7 +255,12 @@ async def upload_file(
 
                 return True
 
-            except Exception:
+            except Exception as e2:
+
+                print(
+                    "Document fallback failed:",
+                    e2
+                )
 
                 return False
 
@@ -237,7 +270,10 @@ async def upload_file(
 
     try:
 
-        if thumbnail and os.path.exists(thumbnail):
+        if (
+            thumbnail
+            and os.path.exists(thumbnail)
+        ):
 
             try:
 
@@ -249,8 +285,12 @@ async def upload_file(
 
                 return True
 
-            except Exception:
-                pass
+            except Exception as e:
+
+                print(
+                    "Document thumbnail upload failed:",
+                    e
+                )
 
         await message.reply_document(
             document=str(file_path),
@@ -259,7 +299,12 @@ async def upload_file(
 
         return True
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            "Document upload failed:",
+            e
+        )
 
         return False
 
@@ -269,9 +314,13 @@ async def upload_file(
 # =========================
 
 @Client.on_message(
-    filters.command("setthumb") & filters.private
+    filters.command("setthumb")
+    & filters.private
 )
-async def set_thumb_command(client, message):
+async def set_thumb_command(
+    client,
+    message
+):
 
     if message.from_user.id != OWNER_ID:
 
@@ -291,16 +340,22 @@ async def set_thumb_command(client, message):
 # =========================
 
 @Client.on_message(
-    filters.photo & filters.private
+    filters.photo
+    & filters.private
 )
-async def save_thumbnail(client, message):
+async def save_thumbnail(
+    client,
+    message
+):
 
     if message.from_user.id != OWNER_ID:
         return
 
     file_id = message.photo.file_id
 
-    save_thumbnail_file_id(file_id)
+    save_thumbnail_file_id(
+        file_id
+    )
 
     try:
 
@@ -310,17 +365,30 @@ async def save_thumbnail(client, message):
         )
 
         if os.path.exists(THUMB_FILE):
-            os.remove(THUMB_FILE)
+
+            os.remove(
+                THUMB_FILE
+            )
 
         downloaded = await message.download(
             file_name=THUMB_FILE
         )
 
-        if downloaded and os.path.exists(THUMB_FILE):
-            pass
+        if not (
+            downloaded
+            and os.path.exists(THUMB_FILE)
+        ):
 
-    except Exception:
-        pass
+            print(
+                "Thumbnail local save failed."
+            )
+
+    except Exception as e:
+
+        print(
+            "Thumbnail download error:",
+            e
+        )
 
     await message.reply_text(
         "✅ Thumbnail saved permanently!\n\n"
@@ -335,15 +403,20 @@ async def save_thumbnail(client, message):
 # =========================
 
 @Client.on_message(
-    filters.document |
-    filters.video |
-    filters.audio |
-    filters.voice |
-    filters.animation
+    filters.document
+    | filters.video
+    | filters.audio
+    | filters.voice
+    | filters.animation
 )
-async def file_handler(client, message):
+async def file_handler(
+    client,
+    message
+):
 
-    user_files[message.from_user.id] = {
+    user_files[
+        message.from_user.id
+    ] = {
 
         "message": message,
 
@@ -367,13 +440,16 @@ async def file_handler(client, message):
 # =========================
 
 @Client.on_message(
-    filters.text &
-    ~filters.command("start") &
-    ~filters.command("setthumb") &
-    ~filters.command("setting") &
-    ~filters.command("settings")
+    filters.text
+    & ~filters.command("start")
+    & ~filters.command("setthumb")
+    & ~filters.command("setting")
+    & ~filters.command("settings")
 )
-async def get_new_name(client, message):
+async def get_new_name(
+    client,
+    message
+):
 
     uid = message.from_user.id
 
@@ -408,11 +484,16 @@ async def get_new_name(client, message):
             f"❌ Download failed.\n\n{e}"
         )
 
-        user_files.pop(uid, None)
+        user_files.pop(
+            uid,
+            None
+        )
 
         return
 
-    old_file = Path(file_path)
+    old_file = Path(
+        file_path
+    )
 
     # =========================
     # PRESERVE EXTENSION
@@ -425,8 +506,8 @@ async def get_new_name(client, message):
     else:
 
         final_name = (
-            new_name +
-            old_file.suffix
+            new_name
+            + old_file.suffix
         )
 
     new_file = old_file.with_name(
@@ -439,12 +520,18 @@ async def get_new_name(client, message):
 
     try:
 
-        if old_file.resolve() != new_file.resolve():
+        if (
+            old_file.resolve()
+            != new_file.resolve()
+        ):
 
             if new_file.exists():
+
                 new_file.unlink()
 
-            old_file.rename(new_file)
+            old_file.rename(
+                new_file
+            )
 
     except Exception as e:
 
@@ -455,17 +542,26 @@ async def get_new_name(client, message):
         try:
 
             if old_file.exists():
+
                 old_file.unlink()
 
         except Exception:
             pass
 
-        user_files.pop(uid, None)
+        user_files.pop(
+            uid,
+            None
+        )
 
         return
 
-    user_files[uid]["file_path"] = str(new_file)
-    user_files[uid]["cancelled"] = False
+    user_files[uid][
+        "file_path"
+    ] = str(new_file)
+
+    user_files[uid][
+        "cancelled"
+    ] = False
 
     await message.reply_text(
 
@@ -476,6 +572,7 @@ async def get_new_name(client, message):
         reply_markup=InlineKeyboardMarkup(
             [
                 [
+
                     InlineKeyboardButton(
                         "🗜 Compress",
                         callback_data="compress"
@@ -485,6 +582,7 @@ async def get_new_name(client, message):
                         "📄 Rename Only",
                         callback_data="rename_only"
                     )
+
                 ]
             ]
         )
@@ -516,32 +614,43 @@ async def action_handler(
 
         return
 
-    await query.answer()
-
-    # ==================================================
+    # =========================
     # CANCEL
-    # ==================================================
+    # =========================
 
     if query.data == "cancel_compress":
 
-        data = user_files.get(uid)
+        await query.answer(
+            "Cancelling..."
+        )
+
+        data = user_files.get(
+            uid
+        )
 
         if not data:
             return
 
         data["cancelled"] = True
 
-        process = data.get("process")
+        process = data.get(
+            "process"
+        )
 
         if process:
 
             try:
 
                 if process.returncode is None:
+
                     process.kill()
 
-            except Exception:
-                pass
+            except Exception as e:
+
+                print(
+                    "Process kill error:",
+                    e
+                )
 
         try:
 
@@ -553,6 +662,8 @@ async def action_handler(
             pass
 
         return
+
+    await query.answer()
 
     # ==================================================
     # RENAME ONLY
@@ -580,7 +691,9 @@ async def action_handler(
 
             return
 
-        source = Path(file_path)
+        source = Path(
+            file_path
+        )
 
         upload_mode = get_upload_mode()
 
@@ -591,6 +704,7 @@ async def action_handler(
         try:
 
             await query.message.edit_text(
+
                 "✏️ Rename Only\n\n"
                 f"📄 `{source.name}`\n"
                 f"📤 Upload Mode: "
@@ -606,13 +720,16 @@ async def action_handler(
         # THUMBNAIL
         # =========================
 
-        thumbnail = await get_thumbnail(client)
+        thumbnail = await get_thumbnail(
+            client
+        )
 
         # =========================
         # VIDEO EXTENSIONS
         # =========================
 
         video_extensions = (
+
             ".mp4",
             ".mkv",
             ".mov",
@@ -665,16 +782,24 @@ async def action_handler(
             try:
 
                 result = await asyncio.to_thread(
+
                     subprocess.run,
+
                     metadata_cmd,
+
                     stdout=subprocess.DEVNULL,
+
                     stderr=subprocess.PIPE
                 )
 
                 if (
+
                     result.returncode == 0
+
                     and metadata_file.exists()
+
                     and metadata_file.stat().st_size > 0
+
                 ):
 
                     os.replace(
@@ -687,13 +812,12 @@ async def action_handler(
                     error_text = ""
 
                     if result.stderr:
+
                         error_text = result.stderr.decode(
                             "utf-8",
                             errors="ignore"
                         ).strip()
 
-                    # Don't stop upload just because
-                    # container doesn't support the tag
                     if error_text:
 
                         print(
@@ -713,6 +837,7 @@ async def action_handler(
                 try:
 
                     if metadata_file.exists():
+
                         metadata_file.unlink()
 
                 except Exception:
@@ -723,9 +848,13 @@ async def action_handler(
         # ==================================================
 
         success = await upload_file(
+
             client,
+
             query.message,
+
             source,
+
             thumbnail
         )
 
@@ -749,12 +878,16 @@ async def action_handler(
         try:
 
             if source.exists():
+
                 source.unlink()
 
         except Exception:
             pass
 
-        user_files.pop(uid, None)
+        user_files.pop(
+            uid,
+            None
+        )
 
         return
 
@@ -770,7 +903,9 @@ async def action_handler(
 
             reply_markup=InlineKeyboardMarkup(
                 [
+
                     [
+
                         InlineKeyboardButton(
                             "360p",
                             callback_data="compress_360"
@@ -780,9 +915,11 @@ async def action_handler(
                             "480p",
                             callback_data="compress_480"
                         )
+
                     ],
 
                     [
+
                         InlineKeyboardButton(
                             "720p",
                             callback_data="compress_720"
@@ -792,7 +929,9 @@ async def action_handler(
                             "1080p",
                             callback_data="compress_1080"
                         )
+
                     ]
+
                 ]
             )
         )
@@ -811,10 +950,12 @@ async def action_handler(
         )[1]
 
         if quality not in (
+
             "360",
             "480",
             "720",
             "1080"
+
         ):
 
             await query.message.reply_text(
@@ -835,7 +976,9 @@ async def action_handler(
 
             return
 
-        user_files[uid]["cancelled"] = False
+        user_files[uid][
+            "cancelled"
+        ] = False
 
         # =========================
         # OUTPUT
@@ -845,9 +988,14 @@ async def action_handler(
             f"{input_path.stem}_{quality}p.mp4"
         )
 
+        user_files[uid][
+            "output_file"
+        ] = str(output_file)
+
         try:
 
             if output_file.exists():
+
                 output_file.unlink()
 
         except Exception:
@@ -899,8 +1047,11 @@ async def action_handler(
         try:
 
             duration_result = await asyncio.to_thread(
+
                 subprocess.check_output,
+
                 duration_cmd,
+
                 stderr=subprocess.DEVNULL
             )
 
@@ -908,19 +1059,20 @@ async def action_handler(
                 duration_result.decode().strip()
             )
 
-        except Exception:
+        except Exception as e:
 
             await query.message.reply_text(
-                "❌ Unable to read video duration."
+                f"❌ Unable to read video duration.\n\n{e}"
             )
 
             return
 
         if duration <= 0:
+
             duration = 1
 
         # =========================
-        # FFMPEG
+        # FFMPEG COMMAND
         # =========================
 
         cmd = [
@@ -997,7 +1149,449 @@ async def action_handler(
         status = await query.message.reply_text(
 
             "🗜 Compressing...\n\n"
+
             f"🎬 Quality: {quality}p\n"
+
             f"🎞 Codec: {vcodec}\n"
+
             f"🎚 CRF: {crf}\n"
-            f"?
+
+            "📊 Progress: 0%\n"
+
+            "⏱ Elapsed: 0s\n\n"
+
+            "Please wait...",
+
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+
+                        InlineKeyboardButton(
+                            "🛑 Cancel",
+                            callback_data="cancel_compress"
+                        )
+
+                    ]
+                ]
+            )
+        )
+
+        user_files[uid][
+            "process"
+        ] = None
+
+        start_time = time.time()
+
+        # =========================
+        # START FFMPEG
+        # =========================
+
+        try:
+
+            process = await asyncio.create_subprocess_exec(
+
+                *cmd,
+
+                stdout=asyncio.subprocess.PIPE,
+
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            user_files[uid][
+                "process"
+            ] = process
+
+            last_update = 0
+
+            last_percent = -1
+
+            # =========================
+            # PROGRESS LOOP
+            # =========================
+
+            while True:
+
+                if user_files[uid].get(
+                    "cancelled"
+                ):
+
+                    try:
+
+                        if process.returncode is None:
+
+                            process.kill()
+
+                    except Exception:
+                        pass
+
+                    break
+
+                line = await process.stdout.readline()
+
+                if not line:
+
+                    if process.returncode is not None:
+
+                        break
+
+                    await asyncio.sleep(
+                        0.1
+                    )
+
+                    continue
+
+                line = line.decode(
+                    "utf-8",
+                    errors="ignore"
+                ).strip()
+
+                if line.startswith(
+                    "out_time_ms="
+                ):
+
+                    try:
+
+                        out_time_ms = int(
+                            line.split(
+                                "=",
+                                1
+                            )[1]
+                        )
+
+                        current_time = (
+                            out_time_ms
+                            / 1_000_000
+                        )
+
+                        percent = int(
+
+                            min(
+
+                                100,
+
+                                (
+                                    current_time
+                                    / duration
+                                ) * 100
+
+                            )
+
+                        )
+
+                        elapsed = int(
+                            time.time()
+                            - start_time
+                        )
+
+                        now = time.time()
+
+                        # =========================
+                        # UPDATE EVERY 3 SEC
+                        # =========================
+
+                        if (
+
+                            percent != last_percent
+
+                            and (
+
+                                now
+                                - last_update
+                                >= 3
+
+                                or percent >= 100
+
+                            )
+
+                        ):
+
+                            try:
+
+                                await status.edit_text(
+
+                                    "🗜 Compressing...\n\n"
+
+                                    f"🎬 Quality: {quality}p\n"
+
+                                    f"🎞 Codec: {vcodec}\n"
+
+                                    f"🎚 CRF: {crf}\n"
+
+                                    f"📊 Progress: {percent}%\n"
+
+                                    f"⏱ Elapsed: {elapsed}s\n\n"
+
+                                    "Please wait...",
+
+                                    reply_markup=InlineKeyboardMarkup(
+                                        [
+                                            [
+
+                                                InlineKeyboardButton(
+                                                    "🛑 Cancel",
+                                                    callback_data="cancel_compress"
+                                                )
+
+                                            ]
+                                        ]
+                                    )
+                                )
+
+                            except Exception:
+                                pass
+
+                            last_percent = percent
+
+                            last_update = now
+
+                    except Exception:
+                        pass
+
+            # =========================
+            # WAIT FOR PROCESS
+            # =========================
+
+            await process.wait()
+
+            stderr_data = await process.stderr.read()
+
+            error_text = stderr_data.decode(
+                "utf-8",
+                errors="ignore"
+            ).strip()
+
+            user_files[uid][
+                "process"
+            ] = None
+
+            # =========================
+            # CANCELLED
+            # =========================
+
+            if user_files[uid].get(
+                "cancelled"
+            ):
+
+                try:
+
+                    if output_file.exists():
+
+                        output_file.unlink()
+
+                except Exception:
+                    pass
+
+                try:
+
+                    await status.edit_text(
+                        "🛑 Compression cancelled."
+                    )
+
+                except Exception:
+                    pass
+
+                try:
+
+                    if input_path.exists():
+
+                        input_path.unlink()
+
+                except Exception:
+                    pass
+
+                user_files.pop(
+                    uid,
+                    None
+                )
+
+                return
+
+            # =========================
+            # FAILED
+            # =========================
+
+            if (
+
+                process.returncode != 0
+
+                or not output_file.exists()
+
+                or output_file.stat().st_size == 0
+
+            ):
+
+                print(
+                    "FFmpeg compression failed:",
+                    error_text
+                )
+
+                try:
+
+                    if output_file.exists():
+
+                        output_file.unlink()
+
+                except Exception:
+                    pass
+
+                try:
+
+                    await status.edit_text(
+
+                        "❌ Compression failed.\n\n"
+
+                        + (
+                            error_text[-1500:]
+                            if error_text
+                            else "Unknown FFmpeg error."
+                        )
+
+                    )
+
+                except Exception:
+                    pass
+
+                return
+
+            # =========================
+            # UPLOAD STATUS
+            # =========================
+
+            try:
+
+                await status.edit_text(
+
+                    "✅ Compression completed!\n\n"
+
+                    f"📄 `{output_file.name}`\n"
+
+                    "📤 Uploading..."
+
+                )
+
+            except Exception:
+                pass
+
+            thumbnail = await get_thumbnail(
+                client
+            )
+
+            # =========================
+            # UPLOAD
+            # =========================
+
+            success = await upload_file(
+
+                client,
+
+                status,
+
+                output_file,
+
+                thumbnail
+            )
+
+            if not success:
+
+                try:
+
+                    await status.edit_text(
+                        "❌ Upload failed."
+                    )
+
+                except Exception:
+                    pass
+
+                return
+
+            # =========================
+            # FINISH
+            # =========================
+
+            elapsed = int(
+                time.time()
+                - start_time
+            )
+
+            try:
+
+                await status.edit_text(
+
+                    "✅ Done!\n\n"
+
+                    f"📄 `{output_file.name}`\n"
+
+                    f"🎬 Quality: {quality}p\n"
+
+                    f"🎞 Codec: {vcodec}\n"
+
+                    f"🎚 CRF: {crf}\n"
+
+                    f"⏱ Time: {elapsed}s\n"
+
+                    f"🏷 Metadata: {PERMANENT_METADATA}"
+
+                )
+
+            except Exception:
+                pass
+
+            # =========================
+            # CLEANUP
+            # =========================
+
+            try:
+
+                if input_path.exists():
+
+                    input_path.unlink()
+
+            except Exception:
+                pass
+
+            try:
+
+                if output_file.exists():
+
+                    output_file.unlink()
+
+            except Exception:
+                pass
+
+            user_files.pop(
+                uid,
+                None
+            )
+
+        except Exception as e:
+
+            user_files[uid][
+                "process"
+            ] = None
+
+            try:
+
+                if output_file.exists():
+
+                    output_file.unlink()
+
+            except Exception:
+                pass
+
+            print(
+                "Compression exception:",
+                repr(e)
+            )
+
+            try:
+
+                await status.edit_text(
+
+                    "❌ Compression error.\n\n"
+
+                    f"{e}"
+
+                )
+
+            except Exception:
+                pass
