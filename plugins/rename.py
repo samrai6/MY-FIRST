@@ -9,11 +9,10 @@ from .progress import make_download_callback, make_upload_callback
 from .thumbnail import get_thumbnail
 from .compress import compress_file
 from .setting import load_settings
+from .cancel import get_cancel_event, clear_cancel_event
 
 
-# user_id -> pending file information
 PENDING_FILES = {}
-
 DEFAULT_COMPRESSION_QUALITY = 720
 
 
@@ -75,16 +74,13 @@ async def upload_file(status, file_path, thumbnail=None):
         action="📤 Uploading..."
     )
 
-    # Read upload mode from /setting
     settings = load_settings()
+
     upload_mode = settings.get(
         "upload_mode",
         "video"
     )
 
-    # =========================
-    # DOCUMENT MODE
-    # =========================
     if upload_mode == "document":
 
         try:
@@ -103,9 +99,6 @@ async def upload_file(status, file_path, thumbnail=None):
 
             return False
 
-    # =========================
-    # VIDEO MODE
-    # =========================
     try:
 
         if file_path.suffix.lower() in (
@@ -140,7 +133,6 @@ async def upload_file(status, file_path, thumbnail=None):
             e
         )
 
-    # Fallback to document
     try:
 
         await status.reply_document(
@@ -194,6 +186,8 @@ async def receive_file(client, message):
 
     user_id = message.from_user.id
 
+    clear_cancel_event(user_id)
+
     PENDING_FILES[user_id] = {
         "message": message,
         "name": None
@@ -231,7 +225,9 @@ async def receive_filename(client, message):
 
     user_id = message.from_user.id
 
-    pending = PENDING_FILES.get(user_id)
+    pending = PENDING_FILES.get(
+        user_id
+    )
 
     if not pending:
         return
@@ -319,11 +315,16 @@ async def file_action(
 
         return
 
-    # Prevent double click
     PENDING_FILES.pop(
         user_id,
         None
     )
+
+    cancel_event = get_cancel_event(
+        user_id
+    )
+
+    cancel_event.clear()
 
     await query.answer()
 
@@ -366,6 +367,11 @@ async def file_action(
         input_path = Path(
             input_file
         )
+
+        if cancel_event.is_set():
+            raise RuntimeError(
+                "Operation cancelled."
+            )
 
         # ---------------------------------------------
         # OUTPUT NAME
@@ -415,14 +421,16 @@ async def file_action(
             await query.message.edit_text(
                 f"🗜️ Compressing {DEFAULT_COMPRESSION_QUALITY}p...\n\n"
                 f"🎬 Codec: {codec}\n"
-                f"🎚 CRF: {crf}"
+                f"🎚 CRF: {crf}\n\n"
+                "Use /cancel to stop."
             )
 
             result = await compress_file(
                 input_file=input_path,
                 output_file=output_file,
                 quality=DEFAULT_COMPRESSION_QUALITY,
-                status_message=query.message
+                status_message=query.message,
+                cancel_event=cancel_event
             )
 
             if not result:
@@ -436,6 +444,7 @@ async def file_action(
                 )
 
             # Delete original after compression
+
             try:
 
                 if input_path.exists():
@@ -443,6 +452,11 @@ async def file_action(
 
             except Exception:
                 pass
+
+        if cancel_event.is_set():
+            raise RuntimeError(
+                "Operation cancelled."
+            )
 
         # ---------------------------------------------
         # THUMBNAIL
@@ -472,8 +486,10 @@ async def file_action(
             )
 
         # Delete progress message
+
         try:
             await query.message.delete()
+
         except Exception:
             pass
 
@@ -484,17 +500,33 @@ async def file_action(
             e
         )
 
+        if cancel_event.is_set():
+
+            error_text = (
+                "🛑 Operation cancelled."
+            )
+
+        else:
+
+            error_text = (
+                f"❌ {action.title()} failed.\n\n"
+                f"{str(e)[:3000]}"
+            )
+
         try:
 
             await query.message.edit_text(
-                f"❌ {action.title()} failed.\n\n"
-                f"{str(e)[:3000]}"
+                error_text
             )
 
         except Exception:
             pass
 
     finally:
+
+        clear_cancel_event(
+            user_id
+        )
 
         # ---------------------------------------------
         # CLEANUP
