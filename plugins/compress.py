@@ -222,12 +222,15 @@ def build_ffmpeg_command(
         # Remove old metadata
         "-map_metadata", "-1",
 
-        # New metadata
-        "-metadata",
-        f"title={title}" if title else "title=@SKR",
+        # General metadata
+        "-metadata", "title=@SKR",
+        "-metadata", "comment=@SKR",
 
-        "-metadata",
-        "comment=@SKR",
+        # Video track metadata
+        "-metadata:s:v:0", "title=@SKR",
+
+        # Audio track metadata
+        "-metadata:s:a:0", "title=@SKR",
 
         # Video
         "-vf", scale,
