@@ -1,4 +1,6 @@
 from pathlib import Path
+import asyncio
+import subprocess
 
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -19,11 +21,7 @@ DEFAULT_COMPRESSION_QUALITY = 720
 def build_renamed_filename(original_name, new_name):
     original_ext = get_extension(original_name)
 
-    new_name = safe_filename(
-        new_name,
-        default="file"
-    )
-
+    new_name = safe_filename(new_name, default="file")
     new_name = Path(new_name).stem
 
     if not new_name:
@@ -81,74 +79,63 @@ async def upload_file(status, file_path, thumbnail=None):
         "video"
     )
 
+    # DOCUMENT UPLOAD
     if upload_mode == "document":
-
         try:
-            await status.reply_document(
-                document=str(file_path),
-                progress=callback
-            )
+            kwargs = {
+                "document": str(file_path),
+                "progress": callback
+            }
 
+            if thumbnail and Path(thumbnail).exists():
+                kwargs["thumb"] = thumbnail
+
+            await status.reply_document(**kwargs)
             return True
 
         except Exception as e:
-            print(
-                "Document upload failed:",
-                e
-            )
-
+            print("Document upload failed:", e)
             return False
 
+    # VIDEO UPLOAD
     try:
-
         if file_path.suffix.lower() in (
             ".mp4",
             ".mkv",
             ".webm",
             ".mov",
-            ".avi"
+            ".avi",
+            ".m4v"
         ):
-
             kwargs = {
                 "video": str(file_path),
                 "progress": callback
             }
 
-            if (
-                thumbnail
-                and Path(thumbnail).exists()
-            ):
+            if thumbnail and Path(thumbnail).exists():
                 kwargs["thumb"] = thumbnail
 
-            await status.reply_video(
-                **kwargs
-            )
-
+            await status.reply_video(**kwargs)
             return True
 
     except Exception as e:
+        print("Video upload failed:", e)
 
-        print(
-            "Video upload failed:",
-            e
-        )
-
+    # DOCUMENT FALLBACK
     try:
+        kwargs = {
+            "document": str(file_path),
+            "progress": callback
+        }
 
-        await status.reply_document(
-            document=str(file_path),
-            progress=callback
-        )
+        if thumbnail and Path(thumbnail).exists():
+            kwargs["thumb"] = thumbnail
 
+        await status.reply_document(**kwargs)
         return True
 
     except Exception as e:
-
-        print(
-            "Document fallback failed:",
-            e
-        )
-
+        print("Document fallback failed:", e)
         return False
 
 
@@ -193,9 +180,7 @@ async def receive_file(client, message):
         "name": None
     }
 
-    original_name = get_original_filename(
-        message
-    )
+    original_name = get_original_filename(message)
 
     await message.reply_text(
         "📁 File received!\n\n"
@@ -225,24 +210,18 @@ async def receive_filename(client, message):
 
     user_id = message.from_user.id
 
-    pending = PENDING_FILES.get(
-        user_id
-    )
+    pending = PENDING_FILES.get(user_id)
 
     if not pending:
         return
 
-    new_name = (
-        message.text or ""
-    ).strip()
+    new_name = (message.text or "").strip()
 
     if not new_name:
-
         await message.reply_text(
             "❌ Filename cannot be empty.\n\n"
             "Please send the new file name."
         )
-
         return
 
     safe_name = safe_filename(
@@ -251,12 +230,10 @@ async def receive_filename(client, message):
     )
 
     if not Path(safe_name).stem:
-
         await message.reply_text(
             "❌ Invalid filename.\n\n"
             "Please send another name."
         )
-
         return
 
     pending["name"] = safe_name
@@ -278,62 +255,42 @@ async def receive_filename(client, message):
         r"^fileaction_(rename|compress)$"
     )
 )
-async def file_action(
-    client,
-    query: CallbackQuery
-):
+async def file_action(client, query: CallbackQuery):
 
     user_id = query.from_user.id
 
-    pending = PENDING_FILES.get(
-        user_id
-    )
+    pending = PENDING_FILES.get(user_id)
 
     if not pending:
-
         await query.answer(
             "❌ This file request has expired.",
             show_alert=True
         )
-
         return
 
-    action = query.data.split(
-        "_",
-        1
-    )[1]
+    action = query.data.split("_", 1)[1]
 
     source_message = pending["message"]
     new_name = pending["name"]
 
     if not new_name:
-
         await query.answer(
             "❌ Filename is missing.",
             show_alert=True
         )
-
         return
 
-    PENDING_FILES.pop(
-        user_id,
-        None
-    )
+    PENDING_FILES.pop(user_id, None)
 
-    cancel_event = get_cancel_event(
-        user_id
-    )
-
+    cancel_event = get_cancel_event(user_id)
     cancel_event.clear()
 
     await query.answer()
 
     try:
-
         await query.message.edit_text(
             "⬇️ Downloading..."
         )
-
     except Exception:
         pass
 
@@ -342,17 +299,9 @@ async def file_action(
 
     try:
 
-        # ---------------------------------------------
-        # ORIGINAL FILE NAME
-        # ---------------------------------------------
-
         original_name = get_original_filename(
             source_message
         )
-
-        # ---------------------------------------------
-        # DOWNLOAD
-        # ---------------------------------------------
 
         input_file = await download_file(
             query.message,
@@ -364,18 +313,12 @@ async def file_action(
                 "Download failed."
             )
 
-        input_path = Path(
-            input_file
-        )
+        input_path = Path(input_file)
 
         if cancel_event.is_set():
             raise RuntimeError(
                 "Operation cancelled."
             )
-
-        # ---------------------------------------------
-        # OUTPUT NAME
-        # ---------------------------------------------
 
         output_name = build_renamed_filename(
             original_name,
@@ -383,26 +326,80 @@ async def file_action(
         )
 
         output_file = (
-            input_path.parent
-            / output_name
+            input_path.parent / output_name
         )
 
         if output_file.exists():
             output_file.unlink()
 
-        # ---------------------------------------------
+        # =================================================
         # RENAME
-        # ---------------------------------------------
+        # =================================================
 
         if action == "rename":
 
-            input_path.rename(
-                output_file
+            media_extensions = (
+                ".mp4",
+                ".mkv",
+                ".webm",
+                ".mov",
+                ".avi",
+                ".m4v"
             )
 
-        # ---------------------------------------------
+            title = Path(output_name).stem
+
+            if input_path.suffix.lower() in media_extensions:
+
+                command = [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel", "error",
+
+                    "-i", str(input_path),
+
+                    "-map", "0",
+
+                    # REMOVE ALL OLD METADATA
+                    "-map_metadata", "-1",
+
+                    # ADD OUR METADATA
+                    "-metadata", f"title={title}",
+                    "-metadata", "comment=@SKR",
+
+                    # NO RE-ENCODING
+                    "-c", "copy",
+
+                    "-y",
+                    str(output_file)
+                ]
+
+                result = await asyncio.to_thread(
+                    subprocess.run,
+                    command,
+                    capture_output=True,
+                    text=True
+                )
+
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        result.stderr.strip()
+                        or "FFmpeg metadata update failed."
+                    )
+
+                if not output_file.exists():
+                    raise RuntimeError(
+                        "Renamed output was not created."
+                    )
+
+                input_path.unlink()
+
+            else:
+                input_path.rename(output_file)
+
+        # =================================================
         # COMPRESS
-        # ---------------------------------------------
+        # =================================================
 
         else:
 
@@ -430,7 +427,8 @@ async def file_action(
                 output_file=output_file,
                 quality=DEFAULT_COMPRESSION_QUALITY,
                 status_message=query.message,
-                cancel_event=cancel_event
+                cancel_event=cancel_event,
+                title=Path(output_name).stem
             )
 
             if not result:
@@ -443,13 +441,9 @@ async def file_action(
                     "Compression failed."
                 )
 
-            # Delete original after compression
-
             try:
-
                 if input_path.exists():
                     input_path.unlink()
-
             except Exception:
                 pass
 
@@ -458,17 +452,15 @@ async def file_action(
                 "Operation cancelled."
             )
 
-        # ---------------------------------------------
+        # =================================================
         # THUMBNAIL
-        # ---------------------------------------------
+        # =================================================
 
-        thumbnail = await get_thumbnail(
-            client
-        )
+        thumbnail = await get_thumbnail(client)
 
-        # ---------------------------------------------
+        # =================================================
         # UPLOAD
-        # ---------------------------------------------
+        # =================================================
 
         await query.message.edit_text(
             "📤 Uploading..."
@@ -485,11 +477,8 @@ async def file_action(
                 "Upload failed."
             )
 
-        # Delete progress message
-
         try:
             await query.message.delete()
-
         except Exception:
             pass
 
@@ -501,36 +490,23 @@ async def file_action(
         )
 
         if cancel_event.is_set():
-
-            error_text = (
-                "🛑 Operation cancelled."
-            )
-
+            error_text = "🛑 Operation cancelled."
         else:
-
             error_text = (
                 f"❌ {action.title()} failed.\n\n"
                 f"{str(e)[:3000]}"
             )
 
         try:
-
             await query.message.edit_text(
                 error_text
             )
-
         except Exception:
             pass
 
     finally:
 
-        clear_cancel_event(
-            user_id
-        )
-
-        # ---------------------------------------------
-        # CLEANUP
-        # ---------------------------------------------
+        clear_cancel_event(user_id)
 
         for path in (
             input_file,
@@ -538,12 +514,8 @@ async def file_action(
         ):
 
             try:
-
                 if path:
-
-                    file_path = Path(
-                        path
-                    )
+                    file_path = Path(path)
 
                     if file_path.exists():
                         file_path.unlink()
