@@ -59,7 +59,10 @@ async def get_duration(file_path):
             stderr=subprocess.DEVNULL
         )
 
-        return max(float(result.decode().strip()), 0.1)
+        return max(
+            float(result.decode().strip()),
+            0.1
+        )
 
     except Exception:
         return 0.1
@@ -96,8 +99,13 @@ async def get_resolution(file_path):
         return 0, 0
 
 
-async def get_target_resolution(file_path, resolution_setting):
-    width, height = await get_resolution(file_path)
+async def get_target_resolution(
+    file_path,
+    resolution_setting
+):
+    width, height = await get_resolution(
+        file_path
+    )
 
     if not width or not height:
         return None
@@ -124,11 +132,19 @@ async def get_target_resolution(file_path, resolution_setting):
         width * target_height / height
     )
 
+    # FFmpeg-friendly even dimensions
     target_width -= target_width % 2
     target_height -= target_height % 2
 
-    target_width = max(target_width, 2)
-    target_height = max(target_height, 2)
+    target_width = max(
+        target_width,
+        2
+    )
+
+    target_height = max(
+        target_height,
+        2
+    )
 
     return target_width, target_height
 
@@ -182,7 +198,8 @@ def calculate_target_bitrate(
     Calculate video bitrate for target output size.
 
     target_ratio:
-        0.60 = output approximately 60% of original size.
+        0.60 = output approximately 60%
+        of original size.
 
     Example:
         2 GB -> approximately 1.2 GB
@@ -200,7 +217,7 @@ def calculate_target_bitrate(
         target_size * 8 / 1000
     )
 
-    # Audio total bitrate
+    # Total audio bitrate
     audio_total_kbits = (
         audio_kbps * duration
     )
@@ -212,7 +229,7 @@ def calculate_target_bitrate(
         target_kbits * overhead
     ) - audio_total_kbits
 
-    # Keep a safe minimum
+    # Safe minimum bitrate
     video_bitrate_kbps = max(
         int(video_kbits / duration),
         250
@@ -237,6 +254,7 @@ def build_pass1_command(
 
     command = [
         "ffmpeg",
+
         "-hide_banner",
         "-loglevel",
         "error",
@@ -270,6 +288,12 @@ def build_pass1_command(
 
         "-an",
 
+        # Live progress output
+        "-progress",
+        "pipe:1",
+
+        "-nostats",
+
         "-f",
         "null",
 
@@ -296,6 +320,7 @@ def build_pass2_command(
 
     command = [
         "ffmpeg",
+
         "-hide_banner",
         "-loglevel",
         "error",
@@ -364,6 +389,7 @@ def build_pass2_command(
         "-movflags",
         "+faststart",
 
+        # Live progress output
         "-progress",
         "pipe:1",
 
@@ -399,6 +425,7 @@ async def run_process(
 
     while True:
 
+        # Check cancellation
         if cancel_event and cancel_event.is_set():
 
             try:
@@ -447,6 +474,7 @@ async def run_process(
 
         now = time.monotonic()
 
+        # Update every ~2 seconds
         if (
             now - last_update < 2
             and percent < 100
@@ -476,18 +504,12 @@ async def run_process(
                 percent
             )
 
-            quality_name = get_quality_name(
-                settings or {}
-            )
-
             text = (
-                f"🗜️ **{phase}...**\n\n"
+                "🗜️ **Compressing...**\n\n"
                 f"[{bar}] {percent:.1f}%\n\n"
                 f"📐 Resolution: "
                 f"`{width}x{height}`\n"
                 f"🎬 Codec: `H264`\n"
-                f"🔥 Quality: "
-                f"`{quality_name}`\n"
                 f"⚡ Speed: "
                 f"`{speed:.2f}x`\n"
                 f"⏳ ETA: "
@@ -565,11 +587,8 @@ async def compress_file(
         settings
     )
 
-    # Default:
-    # 60% of original size.
-    #
-    # 2 GB -> around 1.2 GB
-    # 1 GB -> around 600 MB
+    # Default target:
+    # approximately 60% of original size
     target_ratio = 0.60
 
     video_bitrate = calculate_target_bitrate(
@@ -590,8 +609,6 @@ async def compress_file(
         "yuv422p"
     ):
         pix_fmt = "yuv420p"
-
-    passlog = Path("skr_compress")
 
     null_output = (
         "NUL"
@@ -627,42 +644,27 @@ async def compress_file(
             if cancel_event and cancel_event.is_set():
                 raise asyncio.CancelledError()
 
-            # -------------------------
-            # PASS 1
-            # -------------------------
-
-            if status_message:
-
-                try:
-                    await status_message.edit_text(
-                        "🗜️ **Compression Pass 1/2...**\n\n"
-                        f"📐 Resolution: `{width}x{height}`\n"
-                        f"🎬 Codec: `H264`\n"
-                        f"🎯 Target: `~60% of original`\n"
-                        f"📊 Video bitrate: "
-                        f"`{video_bitrate}k`\n"
-                        f"🎵 Audio: `{audio_bitrate}`"
-                    )
-                except Exception:
-                    pass
+            # =========================
+            # INTERNAL PASS 1
+            # =========================
 
             await run_process(
                 pass1,
                 duration,
-                status_message=None,
+                status_message=status_message,
                 cancel_event=cancel_event,
                 width=width,
                 height=height,
                 settings=settings,
-                phase="Pass 1/2"
+                phase="Compressing"
             )
 
             if cancel_event and cancel_event.is_set():
                 raise asyncio.CancelledError()
 
-            # -------------------------
-            # PASS 2
-            # -------------------------
+            # =========================
+            # INTERNAL PASS 2
+            # =========================
 
             await run_process(
                 pass2,
@@ -672,7 +674,7 @@ async def compress_file(
                 width=width,
                 height=height,
                 settings=settings,
-                phase="Compression Pass 2/2"
+                phase="Compressing"
             )
 
             if not output_file.exists():
@@ -703,9 +705,7 @@ async def compress_file(
                         f"📄 `{output_file.name}`\n"
                         f"📐 `{width}x{height}`\n"
                         f"🎬 `H264`\n"
-                        f"🎯 Target: `~60%`\n"
                         f"📦 `{human_size(output_size)}`\n"
-                        f"🎵 `{audio_bitrate}`\n"
                         f"🕐 `{human_time(elapsed)}`"
                     )
                 except Exception:
