@@ -9,13 +9,8 @@ from .progress import human_size, human_speed, human_time, progress_bar
 
 SETTINGS_FILE = "compress_settings.json"
 
-# Only ONE FFmpeg job at a time
 COMPRESSION_LOCK = asyncio.Lock()
 
-
-# =========================
-# SETTINGS
-# =========================
 
 def load_settings():
     default = {
@@ -40,10 +35,6 @@ def load_settings():
     except Exception:
         return default
 
-
-# =========================
-# VIDEO INFORMATION
-# =========================
 
 async def get_duration(file_path):
     cmd = [
@@ -88,7 +79,6 @@ async def get_resolution(file_path):
         )
 
         value = result.decode().strip()
-
         width, height = value.split("x")
 
         return int(width), int(height)
@@ -96,10 +86,6 @@ async def get_resolution(file_path):
     except Exception:
         return 0, 0
 
-
-# =========================
-# TARGET RESOLUTION
-# =========================
 
 async def get_target_resolution(file_path, quality):
     width, height = await get_resolution(file_path)
@@ -109,7 +95,6 @@ async def get_target_resolution(file_path, quality):
 
     target_height = int(quality)
 
-    # Never upscale
     if height <= target_height:
         return width, height
 
@@ -117,7 +102,6 @@ async def get_target_resolution(file_path, quality):
         width * target_height / height
     )
 
-    # FFmpeg requires even dimensions
     target_width -= target_width % 2
     target_height -= target_height % 2
 
@@ -130,16 +114,13 @@ async def get_target_resolution(file_path, quality):
     return target_width, target_height
 
 
-# =========================
-# FFMPEG COMMAND
-# =========================
-
 def build_ffmpeg_command(
     input_file,
     output_file,
     width,
     height,
-    settings
+    settings,
+    title=None
 ):
     codec = settings.get(
         "vcodec",
@@ -186,6 +167,14 @@ def build_ffmpeg_command(
         "-map", "0:v:0",
         "-map", "0:a?",
 
+        "-map_metadata", "-1",
+
+        "-metadata",
+        f"title={title}" if title else "title=@SKR",
+
+        "-metadata",
+        "comment=@SKR",
+
         "-vf", scale,
 
         "-c:v", codec,
@@ -195,8 +184,6 @@ def build_ffmpeg_command(
 
         "-c:a", "aac",
         "-b:a", "128k",
-
-        "-metadata", "comment=@SKR",
 
         "-movflags", "+faststart",
 
@@ -208,16 +195,13 @@ def build_ffmpeg_command(
     ]
 
 
-# =========================
-# FFMPEG PROGRESS
-# =========================
-
 async def compress_file(
     input_file,
     output_file,
     quality,
     status_message,
-    cancel_event=None
+    cancel_event=None,
+    title=None
 ):
     input_file = Path(input_file)
     output_file = Path(output_file)
@@ -250,16 +234,15 @@ async def compress_file(
         output_file,
         width,
         height,
-        settings
+        settings,
+        title=title
     )
 
-    # Check cancellation before waiting
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError()
 
     async with COMPRESSION_LOCK:
 
-        # Check cancellation again after acquiring lock
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
@@ -322,7 +305,6 @@ async def compress_file(
                     )
                 )
 
-                # FIXED INDENTATION
                 now = time.monotonic()
 
                 if (
@@ -475,10 +457,6 @@ async def compress_file(
 
             raise
 
-
-# =========================
-# CLEANUP
-# =========================
 
 def cleanup_file(file_path):
     if not file_path:
