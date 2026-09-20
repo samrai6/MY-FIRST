@@ -20,7 +20,6 @@ from .cancel import get_cancel_event, clear_cancel_event
 
 PENDING_FILES = {}
 
-
 MEDIA_EXTENSIONS = (
     ".mp4",
     ".mkv",
@@ -67,10 +66,7 @@ def get_original_filename(message):
     return "file"
 
 
-async def download_file(
-    status,
-    source_message
-):
+async def download_file(status, source_message):
 
     callback = make_download_callback(
         status,
@@ -106,9 +102,9 @@ async def upload_file(
         "video"
     )
 
-    # ==============================
+    # ==========================================
     # DOCUMENT MODE
-    # ==============================
+    # ==========================================
 
     if upload_mode == "document":
 
@@ -140,9 +136,9 @@ async def upload_file(
 
             return False
 
-    # ==============================
+    # ==========================================
     # VIDEO MODE
-    # ==============================
+    # ==========================================
 
     if file_path.suffix.lower() in MEDIA_EXTENSIONS:
 
@@ -172,9 +168,9 @@ async def upload_file(
                 e
             )
 
-    # ==============================
+    # ==========================================
     # DOCUMENT FALLBACK
-    # ==============================
+    # ==========================================
 
     try:
 
@@ -236,16 +232,11 @@ def action_keyboard():
     )
     & filters.private
 )
-async def receive_file(
-    client,
-    message
-):
+async def receive_file(client, message):
 
     user_id = message.from_user.id
 
-    clear_cancel_event(
-        user_id
-    )
+    clear_cancel_event(user_id)
 
     PENDING_FILES[user_id] = {
         "message": message,
@@ -280,16 +271,11 @@ async def receive_file(
         ]
     )
 )
-async def receive_filename(
-    client,
-    message
-):
+async def receive_filename(client, message):
 
     user_id = message.from_user.id
 
-    pending = PENDING_FILES.get(
-        user_id
-    )
+    pending = PENDING_FILES.get(user_id)
 
     if not pending:
         return
@@ -301,7 +287,8 @@ async def receive_filename(
     if not new_name:
 
         await message.reply_text(
-            "❌ Filename cannot be empty."
+            "❌ Filename cannot be empty.\n\n"
+            "Please send the new file name."
         )
 
         return
@@ -346,9 +333,7 @@ async def file_action(
 
     user_id = query.from_user.id
 
-    pending = PENDING_FILES.get(
-        user_id
-    )
+    pending = PENDING_FILES.get(user_id)
 
     if not pending:
 
@@ -401,6 +386,7 @@ async def file_action(
 
     input_file = None
     output_file = None
+    ffmpeg_process = None
 
     try:
 
@@ -446,7 +432,6 @@ async def file_action(
         )
 
         if output_file.exists():
-
             output_file.unlink()
 
         # ==========================================
@@ -459,14 +444,11 @@ async def file_action(
                 output_name
             ).stem
 
-            # --------------------------------------
+            # ======================================
             # MEDIA FILE
-            # --------------------------------------
+            # ======================================
 
-            if (
-                input_path.suffix.lower()
-                in MEDIA_EXTENSIONS
-            ):
+            if input_path.suffix.lower() in MEDIA_EXTENSIONS:
 
                 command = [
                     "ffmpeg",
@@ -491,7 +473,7 @@ async def file_action(
                     "-metadata",
                     "comment=@SKR",
 
-                    # NO RE-ENCODE
+                    # NO RE-ENCODING
                     "-c",
                     "copy",
 
@@ -499,11 +481,17 @@ async def file_action(
                     str(output_file)
                 ]
 
-                process = await asyncio.create_subprocess_exec(
-                    *command,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                ffmpeg_process = (
+                    await asyncio.create_subprocess_exec(
+                        *command,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
                 )
+
+                # ==================================
+                # WAIT FOR FFMPEG + CANCEL SUPPORT
+                # ==================================
 
                 while True:
 
@@ -511,33 +499,44 @@ async def file_action(
 
                         try:
 
-                            if process.returncode is None:
-                                process.kill()
+                            if (
+                                ffmpeg_process.returncode
+                                is None
+                            ):
+                                ffmpeg_process.kill()
 
                         except Exception:
                             pass
 
-                        await process.wait()
+                        try:
+                            await ffmpeg_process.wait()
+                        except Exception:
+                            pass
 
                         raise asyncio.CancelledError()
 
-                    try:
-
-                        await asyncio.wait_for(
-                            process.communicate(),
-                            timeout=0.2
-                        )
-
+                    if ffmpeg_process.returncode is not None:
                         break
 
-                    except asyncio.TimeoutError:
+                    await asyncio.sleep(0.2)
 
-                        continue
+                stdout, stderr = (
+                    await ffmpeg_process.communicate()
+                )
 
-                if process.returncode != 0:
+                if ffmpeg_process.returncode != 0:
+
+                    error = (
+                        stderr.decode(
+                            errors="ignore"
+                        ).strip()
+                        if stderr
+                        else ""
+                    )
 
                     raise RuntimeError(
-                        "FFmpeg metadata update failed."
+                        error
+                        or "FFmpeg metadata update failed."
                     )
 
                 if not output_file.exists():
@@ -548,9 +547,9 @@ async def file_action(
 
                 input_path.unlink()
 
-            # --------------------------------------
+            # ======================================
             # NON-MEDIA FILE
-            # --------------------------------------
+            # ======================================
 
             else:
 
@@ -612,13 +611,13 @@ async def file_action(
             )
 
             if not result:
+
                 raise RuntimeError(
                     "Compression failed."
                 )
 
-            if not result.get(
-                "success"
-            ):
+            if not result.get("success"):
+
                 raise RuntimeError(
                     "Compression failed."
                 )
@@ -632,7 +631,7 @@ async def file_action(
                 pass
 
         # ==========================================
-        # CANCEL CHECK
+        # FINAL CANCEL CHECK
         # ==========================================
 
         if cancel_event.is_set():
@@ -674,15 +673,34 @@ async def file_action(
         except Exception:
             pass
 
+    # ==============================================
+    # CANCELLED
+    # ==============================================
+
     except asyncio.CancelledError:
+
+        try:
+
+            if (
+                ffmpeg_process
+                and ffmpeg_process.returncode
+                is None
+            ):
+                ffmpeg_process.kill()
+
+                try:
+                    await ffmpeg_process.wait()
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
 
         try:
 
             if input_file:
 
-                path = Path(
-                    input_file
-                )
+                path = Path(input_file)
 
                 if path.exists():
                     path.unlink()
@@ -694,9 +712,7 @@ async def file_action(
 
             if output_file:
 
-                path = Path(
-                    output_file
-                )
+                path = Path(output_file)
 
                 if path.exists():
                     path.unlink()
@@ -713,6 +729,10 @@ async def file_action(
         except Exception:
             pass
 
+    # ==============================================
+    # ERROR
+    # ==============================================
+
     except Exception as e:
 
         print(
@@ -722,11 +742,26 @@ async def file_action(
 
         try:
 
+            if (
+                ffmpeg_process
+                and ffmpeg_process.returncode
+                is None
+            ):
+                ffmpeg_process.kill()
+
+                try:
+                    await ffmpeg_process.wait()
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+
+        try:
+
             if input_file:
 
-                path = Path(
-                    input_file
-                )
+                path = Path(input_file)
 
                 if path.exists():
                     path.unlink()
@@ -738,9 +773,7 @@ async def file_action(
 
             if output_file:
 
-                path = Path(
-                    output_file
-                )
+                path = Path(output_file)
 
                 if path.exists():
                     path.unlink()
