@@ -1,34 +1,33 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import json
+import os
 
 
-SETTINGS_FILE = "compress_settings.json"
+SETTINGS_FILE = "settings.json"
 
 
 def load_settings():
-
     default = {
         "vcodec": "libx264",
         "crf": 24,
         "pix_fmt": "yuv420p",
         "upload_mode": "video",
-
-        # New settings
         "resolution": "720p",
         "video_quality": "balanced",
         "audio_bitrate": "128k"
     }
 
+    if not os.path.exists(SETTINGS_FILE):
+        return default
+
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
 
-        if not isinstance(data, dict):
-            data = {}
-
         for key, value in default.items():
-            data.setdefault(key, value)
+            if key not in data:
+                data[key] = value
 
         return data
 
@@ -37,306 +36,153 @@ def load_settings():
 
 
 def save_settings(data):
-
     with open(SETTINGS_FILE, "w") as f:
-        json.dump(
-            data,
-            f,
-            indent=4
-        )
-
-
-def upload_mode_text(mode):
-
-    if mode == "document":
-        return "📄 Document"
-
-    return "🎬 Video"
-
-
-def quality_text(quality):
-
-    names = {
-        "high": "High",
-        "balanced": "Balanced",
-        "small": "Small",
-        "verysmall": "Very Small"
-    }
-
-    return names.get(
-        quality,
-        "Balanced"
-    )
+        json.dump(data, f, indent=4)
 
 
 def settings_keyboard(data):
 
-    return InlineKeyboardMarkup(
+    codec = data.get("vcodec", "libx264")
+    upload = data.get("upload_mode", "video")
+    resolution = data.get("resolution", "720p")
+    video_quality = data.get("video_quality", "balanced")
+    audio = data.get("audio_bitrate", "128k")
+    crf = data.get("crf", 24)
+
+    return InlineKeyboardMarkup([
+
+        # Upload Mode
         [
+            InlineKeyboardButton(
+                f"🎬 Video {'✅' if upload == 'video' else ''}",
+                callback_data="uploadmode_video"
+            ),
+            InlineKeyboardButton(
+                f"📁 Document {'✅' if upload == 'document' else ''}",
+                callback_data="uploadmode_document"
+            )
+        ],
 
-            # Upload mode
-            [
-                InlineKeyboardButton(
-                    "🎬 Video" +
-                    (
-                        " ✅"
-                        if data["upload_mode"] == "video"
-                        else ""
-                    ),
-                    callback_data="uploadmode_video"
-                ),
+        # Codec
+        [
+            InlineKeyboardButton(
+                f"H264 {'✅' if codec == 'libx264' else ''}",
+                callback_data="codec_x264"
+            ),
+            InlineKeyboardButton(
+                f"H265 {'✅' if codec == 'libx265' else ''}",
+                callback_data="codec_x265"
+            )
+        ],
 
-                InlineKeyboardButton(
-                    "📄 Document" +
-                    (
-                        " ✅"
-                        if data["upload_mode"] == "document"
-                        else ""
-                    ),
-                    callback_data="uploadmode_document"
-                )
-            ],
+        # Resolution
+        [
+            InlineKeyboardButton(
+                f"Original {'✅' if resolution == 'original' else ''}",
+                callback_data="resolution_original"
+            ),
+            InlineKeyboardButton(
+                f"1080p {'✅' if resolution == '1080p' else ''}",
+                callback_data="resolution_1080p"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"720p {'✅' if resolution == '720p' else ''}",
+                callback_data="resolution_720p"
+            ),
+            InlineKeyboardButton(
+                f"480p {'✅' if resolution == '480p' else ''}",
+                callback_data="resolution_480p"
+            )
+        ],
 
-            # Codec
-            [
-                InlineKeyboardButton(
-                    "H264 (x264)" +
-                    (
-                        " ✅"
-                        if data["vcodec"] == "libx264"
-                        else ""
-                    ),
-                    callback_data="codec_x264"
-                ),
+        # Video Quality
+        [
+            InlineKeyboardButton(
+                f"🔥 High {'✅' if video_quality == 'high' else ''}",
+                callback_data="vquality_high"
+            ),
+            InlineKeyboardButton(
+                f"⚖️ Balanced {'✅' if video_quality == 'balanced' else ''}",
+                callback_data="vquality_balanced"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"📦 Small {'✅' if video_quality == 'small' else ''}",
+                callback_data="vquality_small"
+            ),
+            InlineKeyboardButton(
+                f"🗜️ Very Small {'✅' if video_quality == 'verysmall' else ''}",
+                callback_data="vquality_verysmall"
+            )
+        ],
 
-                InlineKeyboardButton(
-                    "H265 (x265)" +
-                    (
-                        " ✅"
-                        if data["vcodec"] == "libx265"
-                        else ""
-                    ),
-                    callback_data="codec_x265"
-                )
-            ],
+        # Audio
+        [
+            InlineKeyboardButton(
+                f"🎵 320k {'✅' if audio == '320k' else ''}",
+                callback_data="audio_320k"
+            ),
+            InlineKeyboardButton(
+                f"🎵 192k {'✅' if audio == '192k' else ''}",
+                callback_data="audio_192k"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"🎵 128k {'✅' if audio == '128k' else ''}",
+                callback_data="audio_128k"
+            ),
+            InlineKeyboardButton(
+                f"🎵 96k {'✅' if audio == '96k' else ''}",
+                callback_data="audio_96k"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"🎵 64k {'✅' if audio == '64k' else ''}",
+                callback_data="audio_64k"
+            )
+        ],
 
-            # Resolution
-            [
-                InlineKeyboardButton(
-                    "📐 Original" +
-                    (
-                        " ✅"
-                        if data["resolution"] == "original"
-                        else ""
-                    ),
-                    callback_data="resolution_original"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "1080p" +
-                    (
-                        " ✅"
-                        if data["resolution"] == "1080p"
-                        else ""
-                    ),
-                    callback_data="resolution_1080p"
-                ),
-
-                InlineKeyboardButton(
-                    "720p" +
-                    (
-                        " ✅"
-                        if data["resolution"] == "720p"
-                        else ""
-                    ),
-                    callback_data="resolution_720p"
-                ),
-
-                InlineKeyboardButton(
-                    "480p" +
-                    (
-                        " ✅"
-                        if data["resolution"] == "480p"
-                        else ""
-                    ),
-                    callback_data="resolution_480p"
-                )
-            ],
-
-            # Video quality
-            [
-                InlineKeyboardButton(
-                    "🎚 High" +
-                    (
-                        " ✅"
-                        if data["video_quality"] == "high"
-                        else ""
-                    ),
-                    callback_data="vquality_high"
-                ),
-
-                InlineKeyboardButton(
-                    "Balanced" +
-                    (
-                        " ✅"
-                        if data["video_quality"] == "balanced"
-                        else ""
-                    ),
-                    callback_data="vquality_balanced"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "Small" +
-                    (
-                        " ✅"
-                        if data["video_quality"] == "small"
-                        else ""
-                    ),
-                    callback_data="vquality_small"
-                ),
-
-                InlineKeyboardButton(
-                    "Very Small" +
-                    (
-                        " ✅"
-                        if data["video_quality"] == "verysmall"
-                        else ""
-                    ),
-                    callback_data="vquality_verysmall"
-                )
-            ],
-
-            # Audio quality
-            [
-                InlineKeyboardButton(
-                    "🔊 320k" +
-                    (
-                        " ✅"
-                        if data["audio_bitrate"] == "320k"
-                        else ""
-                    ),
-                    callback_data="audio_320k"
-                ),
-
-                InlineKeyboardButton(
-                    "192k" +
-                    (
-                        " ✅"
-                        if data["audio_bitrate"] == "192k"
-                        else ""
-                    ),
-                    callback_data="audio_192k"
-                ),
-
-                InlineKeyboardButton(
-                    "128k" +
-                    (
-                        " ✅"
-                        if data["audio_bitrate"] == "128k"
-                        else ""
-                    ),
-                    callback_data="audio_128k"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "96k" +
-                    (
-                        " ✅"
-                        if data["audio_bitrate"] == "96k"
-                        else ""
-                    ),
-                    callback_data="audio_96k"
-                ),
-
-                InlineKeyboardButton(
-                    "64k" +
-                    (
-                        " ✅"
-                        if data["audio_bitrate"] == "64k"
-                        else ""
-                    ),
-                    callback_data="audio_64k"
-                )
-            ],
-
-            # Existing CRF settings
-            [
-                InlineKeyboardButton(
-                    "CRF 18" +
-                    (
-                        " ✅"
-                        if data["crf"] == 18
-                        else ""
-                    ),
-                    callback_data="crf_18"
-                ),
-
-                InlineKeyboardButton(
-                    "CRF 24" +
-                    (
-                        " ✅"
-                        if data["crf"] == 24
-                        else ""
-                    ),
-                    callback_data="crf_24"
-                ),
-
-                InlineKeyboardButton(
-                    "CRF 28" +
-                    (
-                        " ✅"
-                        if data["crf"] == 28
-                        else ""
-                    ),
-                    callback_data="crf_28"
-                )
-            ]
+        # Original CRF settings
+        [
+            InlineKeyboardButton(
+                f"CRF 18 {'✅' if crf == 18 else ''}",
+                callback_data="crf_18"
+            ),
+            InlineKeyboardButton(
+                f"CRF 24 {'✅' if crf == 24 else ''}",
+                callback_data="crf_24"
+            ),
+            InlineKeyboardButton(
+                f"CRF 28 {'✅' if crf == 28 else ''}",
+                callback_data="crf_28"
+            )
         ]
-    )
+    ])
 
 
 def settings_text(data):
 
+    codec = "H264" if data.get("vcodec") == "libx264" else "H265"
+
     return (
-        "⚙️ Compress Settings\n\n"
-
-        f"📤 Upload: "
-        f"{upload_mode_text(data['upload_mode'])}\n"
-
-        f"🎬 Vcodec: "
-        f"{data['vcodec']}\n"
-
-        f"🎚 CRF: "
-        f"{data['crf']}\n"
-
-        f"🎨 Pixel: "
-        f"{data['pix_fmt']}\n"
-
-        f"📐 Resolution: "
-        f"{data['resolution']}\n"
-
-        f"🎚 Quality: "
-        f"{quality_text(data['video_quality'])}\n"
-
-        f"🔊 Audio: "
-        f"{data['audio_bitrate']}"
+        "⚙️ **Compression Settings**\n\n"
+        f"📤 Upload Mode: `{data.get('upload_mode', 'video')}`\n"
+        f"🎞 Codec: `{codec}`\n"
+        f"📐 Resolution: `{data.get('resolution', '720p')}`\n"
+        f"🔥 Video Quality: `{data.get('video_quality', 'balanced')}`\n"
+        f"🎵 Audio Quality: `{data.get('audio_bitrate', '128k')}`\n"
+        f"🎚 CRF: `{data.get('crf', 24)}`\n"
+        f"🎨 Pixel Format: `{data.get('pix_fmt', 'yuv420p')}`"
     )
 
 
-# =========================================================
-# /SETTING
-# =========================================================
-
-@Client.on_message(
-    filters.command("setting") & filters.private
-)
-async def setting_cmd(client, message):
+@Client.on_message(filters.command("setting"))
+async def setting_command(client, message):
 
     data = load_settings()
 
@@ -346,131 +192,94 @@ async def setting_cmd(client, message):
     )
 
 
-# =========================================================
-# SETTINGS CALLBACK
-# =========================================================
-
 @Client.on_callback_query(
     filters.regex(
-        r"^(codec_|crf_|uploadmode_|resolution_|vquality_|audio_)"
+        r"^(uploadmode_|codec_|resolution_|vquality_|audio_|crf_)"
     )
 )
-async def setting_callback(
-    client,
-    query: CallbackQuery
-):
+async def setting_callback(client, query):
 
     data = load_settings()
+    action = query.data
 
-    # =====================================================
     # Upload Mode
-    # =====================================================
+    if action == "uploadmode_video":
+        data["upload_mode"] = "video"
 
-    if query.data.startswith("uploadmode_"):
+    elif action == "uploadmode_document":
+        data["upload_mode"] = "document"
 
-        mode = query.data.split(
-            "_",
-            1
-        )[1]
-
-        if mode in (
-            "video",
-            "document"
-        ):
-            data["upload_mode"] = mode
-
-    # =====================================================
     # Codec
-    # =====================================================
+    elif action == "codec_x264":
+        data["vcodec"] = "libx264"
 
-    elif query.data.startswith("codec_"):
+    elif action == "codec_x265":
+        data["vcodec"] = "libx265"
 
-        codec = query.data.split(
-            "_",
-            1
-        )[1]
-
-        if codec == "x264":
-
-            data["vcodec"] = "libx264"
-
-        elif codec == "x265":
-
-            data["vcodec"] = "libx265"
-
-    # =====================================================
     # Resolution
-    # =====================================================
+    elif action == "resolution_original":
+        data["resolution"] = "original"
 
-    elif query.data.startswith("resolution_"):
+    elif action == "resolution_1080p":
+        data["resolution"] = "1080p"
 
-        resolution = query.data.split(
-            "_",
-            1
-        )[1]
+    elif action == "resolution_720p":
+        data["resolution"] = "720p"
 
-        if resolution in (
-            "original",
-            "1080p",
-            "720p",
-            "480p"
-        ):
-            data["resolution"] = resolution
+    elif action == "resolution_480p":
+        data["resolution"] = "480p"
 
-    # =====================================================
     # Video Quality
-    # =====================================================
+    elif action == "vquality_high":
+        data["video_quality"] = "high"
+        data["crf"] = 18
 
-    elif query.data.startswith("vquality_"):
+    elif action == "vquality_balanced":
+        data["video_quality"] = "balanced"
+        data["crf"] = 24
 
-        quality = query.data.split(
-            "_",
-            1
-        )[1]
+    elif action == "vquality_small":
+        data["video_quality"] = "small"
+        data["crf"] = 28
 
-        quality_map = {
-            "high": 18,
-            "balanced": 24,
-            "small": 28,
-            "verysmall": 32
-        }
+    elif action == "vquality_verysmall":
+        data["video_quality"] = "verysmall"
+        data["crf"] = 32
 
-        if quality in quality_map:
+    # Audio
+    elif action == "audio_320k":
+        data["audio_bitrate"] = "320k"
 
-            data["video_quality"] = quality
-            data["crf"] = quality_map[quality]
+    elif action == "audio_192k":
+        data["audio_bitrate"] = "192k"
 
-    # =====================================================
-    # Audio Bitrate
-    # =====================================================
+    elif action == "audio_128k":
+        data["audio_bitrate"] = "128k"
 
-    elif query.data.startswith("audio_"):
+    elif action == "audio_96k":
+        data["audio_bitrate"] = "96k"
 
-        bitrate = query.data.split(
-            "_",
-            1
-        )[1]
+    elif action == "audio_64k":
+        data["audio_bitrate"] = "64k"
 
-        if bitrate in (
-            "320k",
-            "192k",
-            "128k",
-            "96k",
-            "64k"
-        ):
-            data["audio_bitrate"] = bitrate
+    # CRF
+    elif action == "crf_18":
+        data["crf"] = 18
+        data["video_quality"] = "high"
 
-    # =====================================================
-    # Existing CRF
-    # =====================================================
+    elif action == "crf_24":
+        data["crf"] = 24
+        data["video_quality"] = "balanced"
 
-    elif query.data.startswith("crf_"):
+    elif action == "crf_28":
+        data["crf"] = 28
+        data["video_quality"] = "small"
 
-        crf = query.data.split(
-            "_",
-            1
-        )[1]
+    save_settings(data)
 
-        try:
+    await query.answer("✅ Setting updated")
 
-            cr
+    await query.message.edit_text(
+        settings_text(data),
+        reply_markup=settings_keyboard(data)
+    )
