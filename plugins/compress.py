@@ -4,10 +4,10 @@ import subprocess
 import time
 from pathlib import Path
 
-from .progress import human_size, human_speed, human_time, progress_bar
+from .progress import human_size, human_time, progress_bar
 
 
-SETTINGS_FILE = "compress_settings.json"
+SETTINGS_FILE = "settings.json"
 
 COMPRESSION_LOCK = asyncio.Lock()
 
@@ -17,7 +17,10 @@ def load_settings():
         "vcodec": "libx264",
         "crf": 24,
         "pix_fmt": "yuv420p",
-        "upload_mode": "video"
+        "upload_mode": "video",
+        "resolution": "720p",
+        "video_quality": "balanced",
+        "audio_bitrate": "128k"
     }
 
     try:
@@ -37,7 +40,7 @@ def load_settings():
 
 
 async def get_duration(file_path):
-    cmd = [
+    command = [
         "ffprobe",
         "-v", "error",
         "-show_entries", "format=duration",
@@ -48,21 +51,18 @@ async def get_duration(file_path):
     try:
         result = await asyncio.to_thread(
             subprocess.check_output,
-            cmd,
+            command,
             stderr=subprocess.DEVNULL
         )
 
-        return max(
-            float(result.decode().strip()),
-            0.1
-        )
+        return max(float(result.decode().strip()), 0.1)
 
     except Exception:
         return 0.1
 
 
 async def get_resolution(file_path):
-    cmd = [
+    command = [
         "ffprobe",
         "-v", "error",
         "-select_streams", "v:0",
@@ -74,11 +74,12 @@ async def get_resolution(file_path):
     try:
         result = await asyncio.to_thread(
             subprocess.check_output,
-            cmd,
+            command,
             stderr=subprocess.DEVNULL
         )
 
         value = result.decode().strip()
+
         width, height = value.split("x")
 
         return int(width), int(height)
@@ -87,14 +88,27 @@ async def get_resolution(file_path):
         return 0, 0
 
 
-async def get_target_resolution(file_path, quality):
+async def get_target_resolution(file_path, resolution_setting):
     width, height = await get_resolution(file_path)
 
     if not width or not height:
         return None
 
-    target_height = int(quality)
+    if resolution_setting == "original":
+        return width, height
 
+    targets = {
+        "1080p": 1080,
+        "720p": 720,
+        "480p": 480
+    }
+
+    target_height = targets.get(
+        resolution_setting,
+        720
+    )
+
+    # Never upscale
     if height <= target_height:
         return width, height
 
@@ -102,16 +116,33 @@ async def get_target_resolution(file_path, quality):
         width * target_height / height
     )
 
+    # FFmpeg encoding needs even dimensions
     target_width -= target_width % 2
     target_height -= target_height % 2
 
-    if target_width < 2:
-        target_width = 2
-
-    if target_height < 2:
-        target_height = 2
+    target_width = max(target_width, 2)
+    target_height = max(target_height, 2)
 
     return target_width, target_height
+
+
+def get_quality_name(settings):
+    quality = settings.get(
+        "video_quality",
+        "balanced"
+    )
+
+    names = {
+        "high": "High",
+        "balanced": "Balanced",
+        "small": "Small",
+        "verysmall": "Very Small"
+    }
+
+    return names.get(
+        quality,
+        "Balanced"
+    )
 
 
 def build_ffmpeg_command(
@@ -122,6 +153,7 @@ def build_ffmpeg_command(
     settings,
     title=None
 ):
+
     codec = settings.get(
         "vcodec",
         "libx264"
@@ -137,6 +169,11 @@ def build_ffmpeg_command(
         "yuv420p"
     )
 
+    audio_bitrate = settings.get(
+        "audio_bitrate",
+        "128k"
+    )
+
     try:
         crf = int(crf)
     except Exception:
@@ -148,8 +185,23 @@ def build_ffmpeg_command(
     ):
         codec = "libx264"
 
-    if not isinstance(pix_fmt, str):
+    if pix_fmt not in (
+        "yuv420p",
+        "yuv444p",
+        "yuv422p"
+    ):
         pix_fmt = "yuv420p"
+
+    allowed_audio = (
+        "320k",
+        "192k",
+        "128k",
+        "96k",
+        "64k"
+    )
+
+    if audio_bitrate not in allowed_audio:
+        audio_bitrate = "128k"
 
     scale = (
         f"scale={width}:{height}:"
@@ -157,7 +209,7 @@ def build_ffmpeg_command(
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
     )
 
-    return [
+    command = [
         "ffmpeg",
         "-hide_banner",
         "-loglevel", "error",
@@ -167,14 +219,17 @@ def build_ffmpeg_command(
         "-map", "0:v:0",
         "-map", "0:a?",
 
+        # Remove old metadata
         "-map_metadata", "-1",
 
+        # New metadata
         "-metadata",
         f"title={title}" if title else "title=@SKR",
 
         "-metadata",
         "comment=@SKR",
 
+        # Video
         "-vf", scale,
 
         "-c:v", codec,
@@ -182,11 +237,14 @@ def build_ffmpeg_command(
         "-crf", str(crf),
         "-pix_fmt", pix_fmt,
 
+        # Audio
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", audio_bitrate,
 
+        # MP4/MKV compatibility
         "-movflags", "+faststart",
 
+        # Progress
         "-progress", "pipe:1",
         "-nostats",
 
@@ -194,15 +252,18 @@ def build_ffmpeg_command(
         str(output_file)
     ]
 
+    return command
+
 
 async def compress_file(
     input_file,
     output_file,
-    quality,
-    status_message,
+    quality=None,
+    status_message=None,
     cancel_event=None,
     title=None
 ):
+
     input_file = Path(input_file)
     output_file = Path(output_file)
 
@@ -211,9 +272,16 @@ async def compress_file(
             "Input file not found."
         )
 
+    settings = load_settings()
+
+    resolution_setting = settings.get(
+        "resolution",
+        "720p"
+    )
+
     resolution = await get_target_resolution(
         input_file,
-        quality
+        resolution_setting
     )
 
     if not resolution:
@@ -222,8 +290,6 @@ async def compress_file(
         )
 
     width, height = resolution
-
-    settings = load_settings()
 
     duration = await get_duration(
         input_file
@@ -251,6 +317,7 @@ async def compress_file(
         process = None
 
         try:
+
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=asyncio.subprocess.PIPE,
@@ -259,6 +326,7 @@ async def compress_file(
 
             while True:
 
+                # Cancel check
                 if cancel_event and cancel_event.is_set():
 
                     try:
@@ -330,30 +398,43 @@ async def compress_file(
                         0
                     ) / speed
 
-                bar = progress_bar(percent)
+                if status_message:
 
-                text = (
-                    f"🗜️ Compressing {quality}p...\n\n"
-                    f"[{bar}] {percent:.1f}%\n\n"
-                    f"📐 Resolution: {width}x{height}\n"
-                    f"🎬 Codec: "
-                    f"{settings.get('vcodec', 'libx264')}\n"
-                    f"🎚 CRF: "
-                    f"{settings.get('crf', 24)}\n"
-                    f"⚡ Speed: "
-                    f"{speed:.2f}x\n"
-                    f"⏳ ETA: "
-                    f"{human_time(eta)}\n"
-                    f"🕐 Elapsed: "
-                    f"{human_time(elapsed)}"
-                )
-
-                try:
-                    await status_message.edit_text(
-                        text
+                    bar = progress_bar(
+                        percent
                     )
-                except Exception:
-                    pass
+
+                    quality_name = get_quality_name(
+                        settings
+                    )
+
+                    text = (
+                        "🗜️ **Compressing...**\n\n"
+                        f"[{bar}] {percent:.1f}%\n\n"
+                        f"📐 Resolution: "
+                        f"`{width}x{height}`\n"
+                        f"🎬 Codec: "
+                        f"`{settings.get('vcodec', 'libx264')}`\n"
+                        f"🔥 Quality: "
+                        f"`{quality_name}`\n"
+                        f"🎚 CRF: "
+                        f"`{settings.get('crf', 24)}`\n"
+                        f"🎵 Audio: "
+                        f"`{settings.get('audio_bitrate', '128k')}`\n"
+                        f"⚡ Speed: "
+                        f"`{speed:.2f}x`\n"
+                        f"⏳ ETA: "
+                        f"`{human_time(eta)}`\n"
+                        f"🕐 Elapsed: "
+                        f"`{human_time(elapsed)}`"
+                    )
+
+                    try:
+                        await status_message.edit_text(
+                            text
+                        )
+                    except Exception:
+                        pass
 
             stderr_data = await process.stderr.read()
 
@@ -382,26 +463,45 @@ async def compress_file(
                     "Output file is empty."
                 )
 
-            elapsed = time.monotonic() - start_time
+            elapsed = (
+                time.monotonic() -
+                start_time
+            )
 
-            try:
-                await status_message.edit_text(
-                    f"🗜️ Compression completed!\n\n"
-                    f"📄 `{output_file.name}`\n"
-                    f"📐 {width}x{height}\n"
-                    f"📦 {human_size(output_file.stat().st_size)}\n"
-                    f"🕐 Elapsed: "
-                    f"{human_time(elapsed)}"
-                )
-            except Exception:
-                pass
+            if status_message:
+
+                try:
+                    await status_message.edit_text(
+                        "🗜️ **Compression completed!**\n\n"
+                        f"📄 `{output_file.name}`\n"
+                        f"📐 `{width}x{height}`\n"
+                        f"🎬 `{settings.get('vcodec', 'libx264')}`\n"
+                        f"🔥 `{get_quality_name(settings)}`\n"
+                        f"🎵 `{settings.get('audio_bitrate', '128k')}`\n"
+                        f"📦 `{human_size(output_file.stat().st_size)}`\n"
+                        f"🕐 `{human_time(elapsed)}`"
+                    )
+                except Exception:
+                    pass
 
             return {
                 "success": True,
                 "output": str(output_file),
                 "width": width,
                 "height": height,
-                "quality": quality,
+                "resolution": resolution_setting,
+                "quality": settings.get(
+                    "video_quality",
+                    "balanced"
+                ),
+                "crf": settings.get(
+                    "crf",
+                    24
+                ),
+                "audio_bitrate": settings.get(
+                    "audio_bitrate",
+                    "128k"
+                ),
                 "size": output_file.stat().st_size,
                 "elapsed": elapsed
             }
@@ -409,6 +509,7 @@ async def compress_file(
         except asyncio.CancelledError:
 
             if process:
+
                 try:
                     if process.returncode is None:
                         process.kill()
@@ -426,18 +527,21 @@ async def compress_file(
             except Exception:
                 pass
 
-            try:
-                await status_message.edit_text(
-                    "🛑 Compression cancelled."
-                )
-            except Exception:
-                pass
+            if status_message:
+
+                try:
+                    await status_message.edit_text(
+                        "🛑 **Compression cancelled.**"
+                    )
+                except Exception:
+                    pass
 
             raise
 
         except Exception:
 
             if process:
+
                 try:
                     if process.returncode is None:
                         process.kill()
@@ -459,10 +563,12 @@ async def compress_file(
 
 
 def cleanup_file(file_path):
+
     if not file_path:
         return
 
     try:
+
         path = Path(file_path)
 
         if path.exists():
