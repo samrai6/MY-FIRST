@@ -20,6 +20,7 @@ from .cancel import get_cancel_event, clear_cancel_event
 
 PENDING_FILES = {}
 
+
 MEDIA_EXTENSIONS = (
     ".mp4",
     ".mkv",
@@ -440,9 +441,8 @@ async def file_action(
 
         if action == "rename":
 
-            title = Path(
-                output_name
-            ).stem
+            # MediaInfo General Title is ALWAYS @SKR
+            title = "@SKR"
 
             # ======================================
             # MEDIA FILE
@@ -462,16 +462,37 @@ async def file_action(
                     "-map",
                     "0",
 
-                    # REMOVE OLD METADATA
+                    # REMOVE OLD GLOBAL METADATA
                     "-map_metadata",
                     "-1",
 
-                    # NEW METADATA
+                    # REMOVE OLD CHAPTERS
+                    "-map_chapters",
+                    "-1",
+
+                    # ==================================
+                    # NEW GENERAL METADATA
+                    # ==================================
+
                     "-metadata",
-                    f"title={title}",
+                    "title=@SKR",
 
                     "-metadata",
                     "comment=@SKR",
+
+                    # ==================================
+                    # NEW VIDEO STREAM METADATA
+                    # ==================================
+
+                    "-metadata:s:v:0",
+                    "title=@SKR",
+
+                    # ==================================
+                    # NEW AUDIO STREAM METADATA
+                    # ==================================
+
+                    "-metadata:s:a:0",
+                    "title=@SKR",
 
                     # NO RE-ENCODING
                     "-c",
