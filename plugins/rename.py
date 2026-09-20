@@ -8,12 +8,12 @@ from .file_utils import safe_filename, get_extension
 from .progress import make_download_callback, make_upload_callback
 from .thumbnail import get_thumbnail
 from .compress import compress_file
+from .setting import load_settings
 
 
 # user_id -> pending file information
 PENDING_FILES = {}
 
-# Default compression quality
 DEFAULT_COMPRESSION_QUALITY = 720
 
 
@@ -75,7 +75,39 @@ async def upload_file(status, file_path, thumbnail=None):
         action="📤 Uploading..."
     )
 
+    # Read upload mode from /setting
+    settings = load_settings()
+    upload_mode = settings.get(
+        "upload_mode",
+        "video"
+    )
+
+    # =========================
+    # DOCUMENT MODE
+    # =========================
+    if upload_mode == "document":
+
+        try:
+            await status.reply_document(
+                document=str(file_path),
+                progress=callback
+            )
+
+            return True
+
+        except Exception as e:
+            print(
+                "Document upload failed:",
+                e
+            )
+
+            return False
+
+    # =========================
+    # VIDEO MODE
+    # =========================
     try:
+
         if file_path.suffix.lower() in (
             ".mp4",
             ".mkv",
@@ -83,29 +115,48 @@ async def upload_file(status, file_path, thumbnail=None):
             ".mov",
             ".avi"
         ):
+
             kwargs = {
                 "video": str(file_path),
                 "progress": callback
             }
 
-            if thumbnail and Path(thumbnail).exists():
+            if (
+                thumbnail
+                and Path(thumbnail).exists()
+            ):
                 kwargs["thumb"] = thumbnail
 
-            await status.reply_video(**kwargs)
+            await status.reply_video(
+                **kwargs
+            )
+
             return True
 
     except Exception as e:
-        print("Video upload failed:", e)
 
+        print(
+            "Video upload failed:",
+            e
+        )
+
+    # Fallback to document
     try:
+
         await status.reply_document(
             document=str(file_path),
             progress=callback
         )
+
         return True
 
     except Exception as e:
-        print("Document upload failed:", e)
+
+        print(
+            "Document fallback failed:",
+            e
+        )
+
         return False
 
 
@@ -148,7 +199,9 @@ async def receive_file(client, message):
         "name": None
     }
 
-    original_name = get_original_filename(message)
+    original_name = get_original_filename(
+        message
+    )
 
     await message.reply_text(
         "📁 File received!\n\n"
@@ -164,6 +217,15 @@ async def receive_file(client, message):
 @Client.on_message(
     filters.text
     & filters.private
+    & ~filters.command(
+        [
+            "start",
+            "setting",
+            "cancel",
+            "setthumb",
+            "delthumb"
+        ]
+    )
 )
 async def receive_filename(client, message):
 
@@ -174,7 +236,9 @@ async def receive_filename(client, message):
     if not pending:
         return
 
-    new_name = (message.text or "").strip()
+    new_name = (
+        message.text or ""
+    ).strip()
 
     if not new_name:
 
@@ -218,11 +282,16 @@ async def receive_filename(client, message):
         r"^fileaction_(rename|compress)$"
     )
 )
-async def file_action(client, query: CallbackQuery):
+async def file_action(
+    client,
+    query: CallbackQuery
+):
 
     user_id = query.from_user.id
 
-    pending = PENDING_FILES.get(user_id)
+    pending = PENDING_FILES.get(
+        user_id
+    )
 
     if not pending:
 
@@ -233,7 +302,10 @@ async def file_action(client, query: CallbackQuery):
 
         return
 
-    action = query.data.split("_", 1)[1]
+    action = query.data.split(
+        "_",
+        1
+    )[1]
 
     source_message = pending["message"]
     new_name = pending["name"]
@@ -248,7 +320,10 @@ async def file_action(client, query: CallbackQuery):
         return
 
     # Prevent double click
-    PENDING_FILES.pop(user_id, None)
+    PENDING_FILES.pop(
+        user_id,
+        None
+    )
 
     await query.answer()
 
@@ -284,12 +359,13 @@ async def file_action(client, query: CallbackQuery):
         )
 
         if not input_file:
-
             raise RuntimeError(
                 "Download failed."
             )
 
-        input_path = Path(input_file)
+        input_path = Path(
+            input_file
+        )
 
         # ---------------------------------------------
         # OUTPUT NAME
@@ -301,7 +377,8 @@ async def file_action(client, query: CallbackQuery):
         )
 
         output_file = (
-            input_path.parent / output_name
+            input_path.parent
+            / output_name
         )
 
         if output_file.exists():
@@ -323,9 +400,22 @@ async def file_action(client, query: CallbackQuery):
 
         else:
 
+            settings = load_settings()
+
+            crf = settings.get(
+                "crf",
+                24
+            )
+
+            codec = settings.get(
+                "vcodec",
+                "libx264"
+            )
+
             await query.message.edit_text(
-                f"🗜️ Compressing "
-                f"{DEFAULT_COMPRESSION_QUALITY}p..."
+                f"🗜️ Compressing {DEFAULT_COMPRESSION_QUALITY}p...\n\n"
+                f"🎬 Codec: {codec}\n"
+                f"🎚 CRF: {crf}"
             )
 
             result = await compress_file(
@@ -336,13 +426,11 @@ async def file_action(client, query: CallbackQuery):
             )
 
             if not result:
-
                 raise RuntimeError(
                     "Compression failed."
                 )
 
             if not result.get("success"):
-
                 raise RuntimeError(
                     "Compression failed."
                 )
@@ -379,16 +467,13 @@ async def file_action(client, query: CallbackQuery):
         )
 
         if not success:
-
             raise RuntimeError(
                 "Upload failed."
             )
 
         # Delete progress message
         try:
-
             await query.message.delete()
-
         except Exception:
             pass
 
@@ -424,7 +509,9 @@ async def file_action(client, query: CallbackQuery):
 
                 if path:
 
-                    file_path = Path(path)
+                    file_path = Path(
+                        path
+                    )
 
                     if file_path.exists():
                         file_path.unlink()
