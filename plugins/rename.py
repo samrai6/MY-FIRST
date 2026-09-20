@@ -441,17 +441,11 @@ async def file_action(
 
         if action == "rename":
 
-            # MediaInfo General Title is ALWAYS @SKR
-            title = "@SKR"
-
-            # ======================================
-            # MEDIA FILE
-            # ======================================
-
             if input_path.suffix.lower() in MEDIA_EXTENSIONS:
 
                 command = [
                     "ffmpeg",
+
                     "-hide_banner",
                     "-loglevel",
                     "error",
@@ -459,19 +453,23 @@ async def file_action(
                     "-i",
                     str(input_path),
 
+                    # Keep all streams
                     "-map",
                     "0",
 
-                    # REMOVE OLD GLOBAL METADATA
+                    # ==================================
+                    # REMOVE OLD METADATA
+                    # ==================================
+
                     "-map_metadata",
                     "-1",
 
-                    # REMOVE OLD CHAPTERS
                     "-map_chapters",
                     "-1",
 
                     # ==================================
-                    # NEW GENERAL METADATA
+                    # GENERAL METADATA
+                    # Same style as Compress
                     # ==================================
 
                     "-metadata",
@@ -481,20 +479,23 @@ async def file_action(
                     "comment=@SKR",
 
                     # ==================================
-                    # NEW VIDEO STREAM METADATA
+                    # VIDEO METADATA
                     # ==================================
 
                     "-metadata:s:v:0",
                     "title=@SKR",
 
                     # ==================================
-                    # NEW AUDIO STREAM METADATA
+                    # AUDIO METADATA
                     # ==================================
 
                     "-metadata:s:a:0",
                     "title=@SKR",
 
+                    # ==================================
                     # NO RE-ENCODING
+                    # ==================================
+
                     "-c",
                     "copy",
 
@@ -509,10 +510,6 @@ async def file_action(
                         stderr=asyncio.subprocess.PIPE
                     )
                 )
-
-                # ==================================
-                # WAIT FOR FFMPEG + CANCEL SUPPORT
-                # ==================================
 
                 while True:
 
@@ -568,12 +565,9 @@ async def file_action(
 
                 input_path.unlink()
 
-            # ======================================
-            # NON-MEDIA FILE
-            # ======================================
-
             else:
 
+                # Non-media files
                 input_path.rename(
                     output_file
                 )
@@ -632,13 +626,11 @@ async def file_action(
             )
 
             if not result:
-
                 raise RuntimeError(
                     "Compression failed."
                 )
 
             if not result.get("success"):
-
                 raise RuntimeError(
                     "Compression failed."
                 )
@@ -816,4 +808,4 @@ async def file_action(
 
         clear_cancel_event(
             user_id
-        )
+    )
