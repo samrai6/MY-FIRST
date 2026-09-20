@@ -189,7 +189,7 @@ def build_ffmpeg_command(
         "-vf", scale,
 
         "-c:v", codec,
-        "-preset", "veryfast",
+        "-preset", "ultrafast",
         "-crf", str(crf),
         "-pix_fmt", pix_fmt,
 
