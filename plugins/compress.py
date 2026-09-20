@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -18,7 +19,7 @@ def load_settings():
         "crf": 24,
         "pix_fmt": "yuv420p",
         "upload_mode": "video",
-        "resolution": "720p",
+        "resolution": "original",
         "video_quality": "balanced",
         "audio_bitrate": "128k"
     }
@@ -42,9 +43,12 @@ def load_settings():
 async def get_duration(file_path):
     command = [
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         str(file_path)
     ]
 
@@ -64,10 +68,14 @@ async def get_duration(file_path):
 async def get_resolution(file_path):
     command = [
         "ffprobe",
-        "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-of", "csv=s=x:p=0",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=s=x:p=0",
         str(file_path)
     ]
 
@@ -105,7 +113,7 @@ async def get_target_resolution(file_path, resolution_setting):
 
     target_height = targets.get(
         resolution_setting,
-        720
+        height
     )
 
     # Never upscale
@@ -116,7 +124,6 @@ async def get_target_resolution(file_path, resolution_setting):
         width * target_height / height
     )
 
-    # FFmpeg encoding needs even dimensions
     target_width -= target_width % 2
     target_height -= target_height % 2
 
@@ -145,64 +152,83 @@ def get_quality_name(settings):
     )
 
 
-def build_ffmpeg_command(
-    input_file,
-    output_file,
-    width,
-    height,
-    settings,
-    title=None
-):
+def get_audio_bitrate(settings):
+    allowed = {
+        "320k": 320,
+        "192k": 192,
+        "128k": 128,
+        "96k": 96,
+        "64k": 64
+    }
 
-    codec = settings.get(
-        "vcodec",
-        "libx264"
-    )
-
-    crf = settings.get(
-        "crf",
-        24
-    )
-
-    pix_fmt = settings.get(
-        "pix_fmt",
-        "yuv420p"
-    )
-
-    audio_bitrate = settings.get(
+    value = settings.get(
         "audio_bitrate",
         "128k"
     )
 
-    try:
-        crf = int(crf)
-    except Exception:
-        crf = 24
+    if value not in allowed:
+        value = "128k"
 
-    if codec not in (
-        "libx264",
-        "libx265"
-    ):
-        codec = "libx264"
+    return value, allowed[value]
 
-    if pix_fmt not in (
-        "yuv420p",
-        "yuv444p",
-        "yuv422p"
-    ):
-        pix_fmt = "yuv420p"
 
-    allowed_audio = (
-        "320k",
-        "192k",
-        "128k",
-        "96k",
-        "64k"
+def calculate_target_bitrate(
+    input_size,
+    duration,
+    audio_kbps=128,
+    target_ratio=0.60
+):
+    """
+    Calculate video bitrate for target output size.
+
+    target_ratio:
+        0.60 = output approximately 60% of original size.
+
+    Example:
+        2 GB -> approximately 1.2 GB
+    """
+
+    if duration <= 0:
+        duration = 1
+
+    target_size = int(
+        input_size * target_ratio
     )
 
-    if audio_bitrate not in allowed_audio:
-        audio_bitrate = "128k"
+    # Convert target bytes to kilobits
+    target_kbits = (
+        target_size * 8 / 1000
+    )
 
+    # Audio total bitrate
+    audio_total_kbits = (
+        audio_kbps * duration
+    )
+
+    # Container overhead reserve
+    overhead = 0.94
+
+    video_kbits = (
+        target_kbits * overhead
+    ) - audio_total_kbits
+
+    # Keep a safe minimum
+    video_bitrate_kbps = max(
+        int(video_kbits / duration),
+        250
+    )
+
+    return video_bitrate_kbps
+
+
+def build_pass1_command(
+    input_file,
+    null_output,
+    width,
+    height,
+    video_bitrate,
+    pix_fmt
+):
     scale = (
         f"scale={width}:{height}:"
         f"force_original_aspect_ratio=decrease,"
@@ -212,50 +238,286 @@ def build_ffmpeg_command(
     command = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "error",
+        "-loglevel",
+        "error",
 
-        "-i", str(input_file),
+        "-i",
+        str(input_file),
 
-        "-map", "0:v:0",
-        "-map", "0:a?",
+        "-map",
+        "0:v:0",
 
-        # Remove old metadata
-        "-map_metadata", "-1",
+        "-vf",
+        scale,
+
+        "-c:v",
+        "libx264",
+
+        "-preset",
+        "slow",
+
+        "-b:v",
+        f"{video_bitrate}k",
+
+        "-pix_fmt",
+        pix_fmt,
+
+        "-pass",
+        "1",
+
+        "-passlogfile",
+        "skr_compress",
+
+        "-an",
+
+        "-f",
+        "null",
+
+        null_output
+    ]
+
+    return command
+
+
+def build_pass2_command(
+    input_file,
+    output_file,
+    width,
+    height,
+    video_bitrate,
+    audio_bitrate,
+    pix_fmt
+):
+    scale = (
+        f"scale={width}:{height}:"
+        f"force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+    )
+
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+
+        "-i",
+        str(input_file),
+
+        "-map",
+        "0:v:0",
+
+        "-map",
+        "0:a?",
+
+        # Remove old global metadata
+        "-map_metadata",
+        "-1",
+
+        # Remove chapters
+        "-map_chapters",
+        "-1",
 
         # General metadata
-        "-metadata", "title=@SKR",
-        "-metadata", "comment=@SKR",
+        "-metadata",
+        "title=@SKR",
 
-        # Video track metadata
-        "-metadata:s:v:0", "title=@SKR",
+        "-metadata",
+        "comment=@SKR",
 
-        # Audio track metadata
-        "-metadata:s:a:0", "title=@SKR",
+        # Video metadata
+        "-metadata:s:v:0",
+        "title=@SKR",
+
+        # Audio metadata
+        "-metadata:s:a:0",
+        "title=@SKR",
 
         # Video
-        "-vf", scale,
+        "-vf",
+        scale,
 
-        "-c:v", codec,
-        "-preset", "ultrafast",
-        "-crf", str(crf),
-        "-pix_fmt", pix_fmt,
+        "-c:v",
+        "libx264",
+
+        "-preset",
+        "slow",
+
+        "-b:v",
+        f"{video_bitrate}k",
+
+        "-pix_fmt",
+        pix_fmt,
+
+        "-pass",
+        "2",
+
+        "-passlogfile",
+        "skr_compress",
 
         # Audio
-        "-c:a", "aac",
-        "-b:a", audio_bitrate,
+        "-c:a",
+        "aac",
 
-        # MP4/MKV compatibility
-        "-movflags", "+faststart",
+        "-b:a",
+        audio_bitrate,
 
-        # Progress
-        "-progress", "pipe:1",
+        "-movflags",
+        "+faststart",
+
+        "-progress",
+        "pipe:1",
+
         "-nostats",
 
         "-y",
+
         str(output_file)
     ]
 
     return command
+
+
+async def run_process(
+    command,
+    duration,
+    status_message=None,
+    cancel_event=None,
+    width=0,
+    height=0,
+    settings=None,
+    phase="Compressing"
+):
+    start_time = time.monotonic()
+
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+
+    last_update = 0
+
+    while True:
+
+        if cancel_event and cancel_event.is_set():
+
+            try:
+                if process.returncode is None:
+                    process.kill()
+            except Exception:
+                pass
+
+            await process.wait()
+
+            raise asyncio.CancelledError()
+
+        line = await process.stdout.readline()
+
+        if not line:
+            break
+
+        line = line.decode(
+            "utf-8",
+            errors="ignore"
+        ).strip()
+
+        if "=" not in line:
+            continue
+
+        key, value = line.split(
+            "=",
+            1
+        )
+
+        if key != "out_time_ms":
+            continue
+
+        try:
+            current = int(value) / 1_000_000
+        except Exception:
+            continue
+
+        percent = min(
+            100,
+            max(
+                0,
+                current / duration * 100
+            )
+        )
+
+        now = time.monotonic()
+
+        if (
+            now - last_update < 2
+            and percent < 100
+        ):
+            continue
+
+        last_update = now
+
+        elapsed = max(
+            now - start_time,
+            0.001
+        )
+
+        speed = current / elapsed
+
+        eta = 0
+
+        if speed > 0:
+            eta = max(
+                duration - current,
+                0
+            ) / speed
+
+        if status_message:
+
+            bar = progress_bar(
+                percent
+            )
+
+            quality_name = get_quality_name(
+                settings or {}
+            )
+
+            text = (
+                f"🗜️ **{phase}...**\n\n"
+                f"[{bar}] {percent:.1f}%\n\n"
+                f"📐 Resolution: "
+                f"`{width}x{height}`\n"
+                f"🎬 Codec: `H264`\n"
+                f"🔥 Quality: "
+                f"`{quality_name}`\n"
+                f"⚡ Speed: "
+                f"`{speed:.2f}x`\n"
+                f"⏳ ETA: "
+                f"`{human_time(eta)}`\n"
+                f"🕐 Elapsed: "
+                f"`{human_time(elapsed)}`"
+            )
+
+            try:
+                await status_message.edit_text(
+                    text
+                )
+            except Exception:
+                pass
+
+    stderr_data = await process.stderr.read()
+
+    return_code = await process.wait()
+
+    if return_code != 0:
+
+        error_text = stderr_data.decode(
+            "utf-8",
+            errors="ignore"
+        ).strip()
+
+        raise RuntimeError(
+            error_text or
+            "FFmpeg compression failed."
+        )
 
 
 async def compress_file(
@@ -266,7 +528,6 @@ async def compress_file(
     cancel_event=None,
     title=None
 ):
-
     input_file = Path(input_file)
     output_file = Path(output_file)
 
@@ -279,7 +540,7 @@ async def compress_file(
 
     resolution_setting = settings.get(
         "resolution",
-        "720p"
+        "original"
     )
 
     resolution = await get_target_resolution(
@@ -298,162 +559,121 @@ async def compress_file(
         input_file
     )
 
-    command = build_ffmpeg_command(
+    input_size = input_file.stat().st_size
+
+    audio_bitrate, audio_kbps = get_audio_bitrate(
+        settings
+    )
+
+    # Default:
+    # 60% of original size.
+    #
+    # 2 GB -> around 1.2 GB
+    # 1 GB -> around 600 MB
+    target_ratio = 0.60
+
+    video_bitrate = calculate_target_bitrate(
+        input_size=input_size,
+        duration=duration,
+        audio_kbps=audio_kbps,
+        target_ratio=target_ratio
+    )
+
+    pix_fmt = settings.get(
+        "pix_fmt",
+        "yuv420p"
+    )
+
+    if pix_fmt not in (
+        "yuv420p",
+        "yuv444p",
+        "yuv422p"
+    ):
+        pix_fmt = "yuv420p"
+
+    passlog = Path("skr_compress")
+
+    null_output = (
+        "NUL"
+        if os.name == "nt"
+        else "/dev/null"
+    )
+
+    pass1 = build_pass1_command(
+        input_file,
+        null_output,
+        width,
+        height,
+        video_bitrate,
+        pix_fmt
+    )
+
+    pass2 = build_pass2_command(
         input_file,
         output_file,
         width,
         height,
-        settings,
-        title=title
+        video_bitrate,
+        audio_bitrate,
+        pix_fmt
     )
-
-    if cancel_event and cancel_event.is_set():
-        raise asyncio.CancelledError()
 
     async with COMPRESSION_LOCK:
 
-        if cancel_event and cancel_event.is_set():
-            raise asyncio.CancelledError()
-
         start_time = time.monotonic()
-        last_update = 0
-        process = None
 
         try:
 
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            if cancel_event and cancel_event.is_set():
+                raise asyncio.CancelledError()
 
-            while True:
+            # -------------------------
+            # PASS 1
+            # -------------------------
 
-                # Cancel check
-                if cancel_event and cancel_event.is_set():
-
-                    try:
-                        if process.returncode is None:
-                            process.kill()
-                    except Exception:
-                        pass
-
-                    await process.wait()
-
-                    raise asyncio.CancelledError()
-
-                line = await process.stdout.readline()
-
-                if not line:
-                    break
-
-                line = line.decode(
-                    "utf-8",
-                    errors="ignore"
-                ).strip()
-
-                if "=" not in line:
-                    continue
-
-                key, value = line.split(
-                    "=",
-                    1
-                )
-
-                if key != "out_time_ms":
-                    continue
+            if status_message:
 
                 try:
-                    current = int(value) / 1_000_000
+                    await status_message.edit_text(
+                        "🗜️ **Compression Pass 1/2...**\n\n"
+                        f"📐 Resolution: `{width}x{height}`\n"
+                        f"🎬 Codec: `H264`\n"
+                        f"🎯 Target: `~60% of original`\n"
+                        f"📊 Video bitrate: "
+                        f"`{video_bitrate}k`\n"
+                        f"🎵 Audio: `{audio_bitrate}`"
+                    )
                 except Exception:
-                    continue
+                    pass
 
-                percent = min(
-                    100,
-                    max(
-                        0,
-                        current / duration * 100
-                    )
-                )
+            await run_process(
+                pass1,
+                duration,
+                status_message=None,
+                cancel_event=cancel_event,
+                width=width,
+                height=height,
+                settings=settings,
+                phase="Pass 1/2"
+            )
 
-                now = time.monotonic()
+            if cancel_event and cancel_event.is_set():
+                raise asyncio.CancelledError()
 
-                if (
-                    now - last_update < 2
-                    and percent < 100
-                ):
-                    continue
+            # -------------------------
+            # PASS 2
+            # -------------------------
 
-                last_update = now
-
-                elapsed = max(
-                    now - start_time,
-                    0.001
-                )
-
-                speed = current / elapsed
-
-                eta = 0
-
-                if speed > 0:
-                    eta = max(
-                        duration - current,
-                        0
-                    ) / speed
-
-                if status_message:
-
-                    bar = progress_bar(
-                        percent
-                    )
-
-                    quality_name = get_quality_name(
-                        settings
-                    )
-
-                    text = (
-                        "🗜️ **Compressing...**\n\n"
-                        f"[{bar}] {percent:.1f}%\n\n"
-                        f"📐 Resolution: "
-                        f"`{width}x{height}`\n"
-                        f"🎬 Codec: "
-                        f"`{settings.get('vcodec', 'libx264')}`\n"
-                        f"🔥 Quality: "
-                        f"`{quality_name}`\n"
-                        f"🎚 CRF: "
-                        f"`{settings.get('crf', 24)}`\n"
-                        f"🎵 Audio: "
-                        f"`{settings.get('audio_bitrate', '128k')}`\n"
-                        f"⚡ Speed: "
-                        f"`{speed:.2f}x`\n"
-                        f"⏳ ETA: "
-                        f"`{human_time(eta)}`\n"
-                        f"🕐 Elapsed: "
-                        f"`{human_time(elapsed)}`"
-                    )
-
-                    try:
-                        await status_message.edit_text(
-                            text
-                        )
-                    except Exception:
-                        pass
-
-            stderr_data = await process.stderr.read()
-
-            return_code = await process.wait()
-
-            if return_code != 0:
-
-                error_text = stderr_data.decode(
-                    "utf-8",
-                    errors="ignore"
-                ).strip()
-
-                raise RuntimeError(
-                    error_text or
-                    "FFmpeg compression failed."
-                )
+            await run_process(
+                pass2,
+                duration,
+                status_message=status_message,
+                cancel_event=cancel_event,
+                width=width,
+                height=height,
+                settings=settings,
+                phase="Compression Pass 2/2"
+            )
 
             if not output_file.exists():
                 raise RuntimeError(
@@ -467,8 +687,12 @@ async def compress_file(
                 )
 
             elapsed = (
-                time.monotonic() -
-                start_time
+                time.monotonic()
+                - start_time
+            )
+
+            output_size = (
+                output_file.stat().st_size
             )
 
             if status_message:
@@ -478,10 +702,10 @@ async def compress_file(
                         "🗜️ **Compression completed!**\n\n"
                         f"📄 `{output_file.name}`\n"
                         f"📐 `{width}x{height}`\n"
-                        f"🎬 `{settings.get('vcodec', 'libx264')}`\n"
-                        f"🔥 `{get_quality_name(settings)}`\n"
-                        f"🎵 `{settings.get('audio_bitrate', '128k')}`\n"
-                        f"📦 `{human_size(output_file.stat().st_size)}`\n"
+                        f"🎬 `H264`\n"
+                        f"🎯 Target: `~60%`\n"
+                        f"📦 `{human_size(output_size)}`\n"
+                        f"🎵 `{audio_bitrate}`\n"
                         f"🕐 `{human_time(elapsed)}`"
                     )
                 except Exception:
@@ -497,32 +721,14 @@ async def compress_file(
                     "video_quality",
                     "balanced"
                 ),
-                "crf": settings.get(
-                    "crf",
-                    24
-                ),
-                "audio_bitrate": settings.get(
-                    "audio_bitrate",
-                    "128k"
-                ),
-                "size": output_file.stat().st_size,
+                "video_bitrate": video_bitrate,
+                "audio_bitrate": audio_bitrate,
+                "target_ratio": target_ratio,
+                "size": output_size,
                 "elapsed": elapsed
             }
 
         except asyncio.CancelledError:
-
-            if process:
-
-                try:
-                    if process.returncode is None:
-                        process.kill()
-                except Exception:
-                    pass
-
-                try:
-                    await process.wait()
-                except Exception:
-                    pass
 
             try:
                 if output_file.exists():
@@ -543,19 +749,6 @@ async def compress_file(
 
         except Exception:
 
-            if process:
-
-                try:
-                    if process.returncode is None:
-                        process.kill()
-                except Exception:
-                    pass
-
-                try:
-                    await process.wait()
-                except Exception:
-                    pass
-
             try:
                 if output_file.exists():
                     output_file.unlink()
@@ -563,6 +756,21 @@ async def compress_file(
                 pass
 
             raise
+
+        finally:
+
+            # Remove 2-pass log files
+            for file in (
+                Path("skr_compress-0.log"),
+                Path("skr_compress-0.log.mbtree"),
+                Path("ffmpeg2pass-0.log"),
+                Path("ffmpeg2pass-0.log.mbtree")
+            ):
+                try:
+                    if file.exists():
+                        file.unlink()
+                except Exception:
+                    pass
 
 
 def cleanup_file(file_path):
